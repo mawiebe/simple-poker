@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Poker unit tests</title>
+  <script src="./js/poker.js"></script>
+  <script type="text/javascript">
+    function expect(condition, err, errors) {
+      if (!condition) {
+        errors.push(err);
+      }
+    }
+
+    function testDraw() {
+      var errors = [];
+      var users = ['zhenya', 'misha'];
+      var game = createGame(users, 4);
+
+      draw(game, 'misha', [0, 3]);
+      draw(game, 'zhenya', [2, 3, 4]);
+
+      var zhand = getHand(game, 'zhenya');
+      var mhand = getHand(game, 'misha');
+      // Zhenya's non-swapped cards
+      expect(zhand[0] == game.deck[0], "Z1", errors);
+      expect(zhand[1] == game.deck[2], "Z2", errors);
+      // Zhenya first to draw, so he gets cards 11-13
+      expect(zhand[2] == game.deck[10], "ZDraw1", errors);
+      expect(zhand[3] == game.deck[11], "ZDraw2", errors);
+      expect(zhand[4] == game.deck[12], "ZDraw3", errors);
+
+      // Misha's non-swapped cards
+      expect(mhand[1] == game.deck[3], "M2", errors);
+      expect(mhand[2] == game.deck[5], "M3", errors);
+      expect(mhand[4] == game.deck[9], "M5", errors);
+
+      // Misha is second to draw, so he gets cards 14 and 15
+      expect(mhand[0] == game.deck[13], "MDraw1", errors);
+      expect(mhand[3] == game.deck[14], "MDraw2", errors);
+
+      return {
+        game: game,
+        zhand: zhand,
+        mhand: mhand,
+        errors: errors,
+      }
+    }
+
+    function getCardId(card) {
+      var rank = -1,
+        suit = -1;
+      for (var i = 0; i < ranks.length; i++) {
+        if (card.charAt(0) == ranks[i].charAt(0)) {
+          rank = i;
+          break;
+        }
+      }
+      for (var i = 0; i < suits.length; i++) {
+        if (card.charAt(1) == suits[i].charAt(0)) {
+          suit = i;
+          break;
+        }
+      }
+      if (rank == -1 || suit == -1) {
+        throw "Could not parse " + card;
+      }
+      return suit * ranks.length + rank;
+    }
+
+    function parseHand(cards) {
+      var hand = [];
+      for (var i in cards) {
+        hand.push(getCardId(cards[i]));
+      }
+      return hand;
+    }
+
+    function testCombo() {
+      var errors = [];
+
+      expect(getCombo(parseHand(["4♠", "4♥", "4♦", "4♣", "A♣"])) == "Four",
+        "Four", errors);
+      expect(getCombo(parseHand(["3♠", "3♥", "3♦", "2♣", "2♣"])) == "Full house",
+        "Full house", errors);
+      expect(getCombo(parseHand(["3♠", "3♥", "3♦", "2♣", "4♣"])) == "Three",
+        "Three", errors);
+      expect(getCombo(parseHand(["3♠", "4♥", "5♦", "6♣", "7♣"])) == "Straight",
+        "Straight", errors);
+      expect(getCombo(parseHand(["A♠", "2♥", "3♦", "4♣", "5♣"])) == "Straight",
+          "Straight-A-low", errors);
+      expect(getCombo(parseHand(["0♠", "J♥", "Q♦", "K♣", "A♣"])) == "Straight",
+          "Straight-A-high", errors);
+      expect(getCombo(parseHand(["9♠", "0♠", "J♠", "Q♠", "K♠"])) == "Straight Flush",
+              "Straight Flush", errors);
+      expect(getCombo(parseHand(["0♠", "J♠", "Q♠", "K♠", "A♠"])) == "Royal Flush",
+              "Royal Flush", errors);
+        expect(getCombo(parseHand(["9♠", "J♠", "Q♠", "K♠", "A♠"])) == "Flush",
+                      "Flush", errors);
+      return {
+        errors: errors
+      };
+    }
+  </script>
+</head>
+
+<body>
+  <tt>
+    Zhenya - firts, Misha - second.<br />
+    Zhenya swapped cards 3,4,5<br />
+    Misha swapped cards 1, 4.<br />
+    <script type="text/javascript">
+      var testResults = testCombo();
+
+      if (testResults.errors.length > 0) {
+        document.write("testCombo Errors: <br>");
+        for (var i in testResults.errors) {
+          document.write(testResults.errors[i] + "<br/>");
+        }
+      } else {
+        document.write("testCombo successful<br>");
+      }
+      testResults = testDraw();
+
+      if (testResults.errors.length > 0) {
+        document.write("TestDraw Errors: <br>");
+        for (var i in testResults.errors) {
+          document.write(testResults.errors[i] + "<br/>");
+        }
+      } else {
+        document.write("TestDraw successful<br>");
+      }
+
+      var str = "Zhenya's hand: ";
+      var hand = testResults.zhand;
+      if (!hand || !hand.length) {
+        str += JSON.stringify(hand);
+      } else {
+        for (var i in hand) {
+          str += getCard(hand[i]).text + " ";
+        }
+        str += getCombo(hand);
+      }
+      str += "<br>Misha's hand:&nbsp; ";
+      hand = testResults.mhand;
+      if (!hand || !hand.length) {
+        str += JSON.stringify(hand);
+      } else {
+        for (var i in hand) {
+          str += getCard(hand[i]).text + " ";
+        }
+        str += getCombo(hand);
+      }
+      str += "<br/>Deck:<br/>";
+      for (var i in testResults.game.deck) {
+        str += getCard(testResults.game.deck[i]).text + " ";
+        if (i % 10 == 9) {
+          str += "<br>"
+        }
+      }
+      document.write(str);
+    </script>
+  </tt>
+</body>
+
+</html>
