@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Poker unit tests</title>
+  <script src="./js/util.js"></script>
+  <script src="../public/js/poker.js"></script>
+  <script src="./js/poker.js"></script>
+  <script type="text/javascript">
+    function outputHand(hand, combo) {
+      if (!hand || !hand.length) {
+        return JSON.stringify(hand);
+      }
+      var str = "";
+      for (var i in hand) {
+        str += getCard(hand[i]).text + " ";
+      }
+      str += combo.combinationName;
+      for (var i in combo.significantRanks) {
+        str += " " + ranks[combo.significantRanks[i]];
+      }
+      return str;
+    }
+
+    function sampleGame() {
+      var users = ['zhenya', 'misha'];
+      var game = createGame(users, 4);
+
+      draw(game, 'misha', [0, 3]);
+      draw(game, 'zhenya', [2, 3, 4]);
+
+      var zhand = getHand(game, 'zhenya');
+      var zcombo = getCombo(zhand);
+      var mhand = getHand(game, 'misha');
+      var mcombo = getCombo(mhand);
+
+      document.write("Zhenya's hand: " + outputHand(zhand, zcombo) + "<br>");
+      document.write("Misha's hand:&nbsp; " + outputHand(mhand, mcombo) + "<br>");
+
+      var compare = compareCombos(zcombo, mcombo);
+      if (compare == 0) {
+        document.write("It's a draw<br/>")
+      } else {
+        document.write((compare < 0 ? "Misha" : "Zhenya") + " wins!<br/>")
+      }
+
+      var str = "Deck:<br/>";
+      for (var i in game.deck) {
+        str += getCard(game.deck[i]).text + " ";
+        if (i % 10 == 9) {
+          str += "<br>"
+        }
+      }
+      document.write(str);
+    }
+  </script>
+</head>
+
+<body>
+  <h3>Tests</h3>
+  <script type="text/javascript">
+    outputTest(testCombo(), "testCombo");
+    outputTest(testDraw(), "testDraw");
+    outputTest(testCompare(), "testCompare");
+  </script>
+  <h3>Sample game</h3>
+  <tt>
+    Zhenya - firts, Misha - second.<br />
+    Zhenya swapped cards 3,4,5<br />
+    Misha swapped cards 1, 4.<br />
+    <script type="text/javascript">
+      sampleGame();
+    </script>
+  </tt>
+</body>
+
+</html>
