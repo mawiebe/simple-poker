@@ -20,62 +20,23 @@ function shuffle(array) {
   return array;
 }
 
-var globalUser = "";
+var globalPlayer = "";
 
 var ranks = [
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "X",
-  "J",
-  "Q",
-  "K",
-  "A"
+  "2", "3", "4", "5", "6", "7", "8", "9", "X", "J", "Q", "K", "A"
 ];
 var rankNames = [
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "10",
-  "Jack",
-  "Queen",
-  "King",
-  "Ace"
+  "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"
 ];
 
 var suits = [
-  "♠",
-  "♥",
-  "♦",
-  "♣",
-  "⛀",
-  "⛂"
+  "♠", "♥", "♦", "♣", "⛀", "⛂"
 ];
 var suitColors = [
-  "black",
-  "red",
-  "red",
-  "black",
-  "red",
-  "black"
+  "black", "red", "red", "black", "red", "black"
 ];
 var suitNames = [
-  "spades",
-  "hearts",
-  "diamonds",
-  "clubs",
-  "shields",
-  "cups"
+  "spades", "hearts", "diamonds", "clubs", "shields", "cups"
 ];
 
 var Rank2 = 0;
@@ -102,11 +63,10 @@ function getCard(code) {
   }
 }
 
-function draw(game, userId, cards) {
-  game.draws[userId] = cards;
-}
-
-function createGame(users, suitsToUse) {
+function createGame(players, suitsToUse) {
+  if (!suitsToUse) {
+    suitsToUse = 4;
+  }
   var deckSize = suitsToUse * ranks.length;
   var cards = [...Array(deckSize).keys()]
   // for (var i = 0; i < suitsToUse*ranks.length; i++) {
@@ -116,41 +76,78 @@ function createGame(users, suitsToUse) {
 
   return {
     deck: cards,
-    users: users,
+    players: players,
     draws: {}
   };
 }
 
-function getHand(game, userId) {
-  var userIdx = -1;
+function getResults(game) {
+  if (!game.draws) {
+    return null;
+  }
+  var players = [];
+  var maxCombo = null;
+  var minCombo = null;
+
+  for (var i in game.players) {
+    var playerId = game.players[i].id;
+    if (!game.draws[playerId]) {
+      return null;
+    }
+    var hand = getHand(game, playerId);
+    var combo = getCombo(hand);
+    maxCombo = (maxCombo == null || compareCombos(combo, maxCombo) > 0 ? combo: maxCombo);
+    minCombo = (minCombo == null || compareCombos(combo, minCombo) < 0 ? combo: minCombo);
+    players.push({
+      name: game.players[i].name,
+      id: game.players[i].id,
+      hand: hand,
+      combo: combo
+    });
+  }
+  for (var i in players) {
+    if (compareCombos(players[i].combo, maxCombo) == 0) {
+      players[i].wins = true;
+    }
+    if (compareCombos(players[i].combo, minCombo) == 0) {
+      players[i].loses = true;
+    }
+  }
+
+  return players;
+}
+
+
+function getHand(game, playerId) {
+  var playerIdx = -1;
   // If we have 4 players, then first 4*5 cards in the deck are used for the
   // initial hands, and the rest - for draw.
-  var drawOffset = game.users.length * handSize;
-  // Find user and find positions of their draw cardsl
-  for (var idx = 0; idx < game.users.length; idx++) {
-    var otherUserId = game.users[idx];
-    if (otherUserId == userId) {
-      userIdx = idx;
+  var drawOffset = game.players.length * handSize;
+  // Find player and find positions of their draw cardsl
+  for (var idx = 0; idx < game.players.length; idx++) {
+    var otherPlayerId = game.players[idx].id;
+    if (otherPlayerId == playerId) {
+      playerIdx = idx;
       break;
     }
-    if (game.draws && game.draws[otherUserId]) {
-      drawOffset += game.draws[otherUserId].length;
+    if (game.draws && game.draws[otherPlayerId]) {
+      drawOffset += game.draws[otherPlayerId].length;
       count = 1;
     }
   }
-  if (userIdx == -1) {
+  if (playerIdx == -1) {
     return {
-      error: "user " + userId + " is not playing"
+      error: "player " + playerId + " is not playing"
     };
   }
   var hand = [];
   for (var i = 0; i < handSize; i++) {
-    hand.push(game.deck[userIdx + game.users.length * i]);
+    hand.push(game.deck[playerIdx + game.players.length * i]);
   }
-  if (game.draws && game.draws[userId]) {
-    for (var i = 0; i < game.draws[userId].length; i++) {
+  if (game.draws && game.draws[playerId]) {
+    for (var i = 0; i < game.draws[playerId].length; i++) {
       count = 1;
-      var discardedIndex = game.draws[userId][i];
+      var discardedIndex = game.draws[playerId][i];
       hand[discardedIndex] = game.deck[drawOffset + i];
     }
   }

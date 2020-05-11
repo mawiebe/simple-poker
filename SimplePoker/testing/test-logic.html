@@ -24,15 +24,15 @@
     }
 
     function sampleGame() {
-      var users = ['zhenya', 'misha'];
+      var users = [{id:'123', name:'zhenya'}, {id:'456', name:'misha'}];
       var game = createGame(users, 4);
 
-      draw(game, 'misha', [0, 3]);
-      draw(game, 'zhenya', [2, 3, 4]);
+      draw(game, '456', [0, 3]);
+      draw(game, '123', [2, 3, 4]);
 
-      var zhand = getHand(game, 'zhenya');
+      var zhand = getHand(game, '123');
       var zcombo = getCombo(zhand);
-      var mhand = getHand(game, 'misha');
+      var mhand = getHand(game, '456');
       var mcombo = getCombo(mhand);
 
       document.write("Zhenya's hand: " + outputHand(zhand, zcombo) + "<br>");

@@ -1,67 +1,161 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/7.14.2/firebase-app.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/7.14.2/firebase-auth.js"></script>
-    <script defer src="/__/firebase/7.14.2/firebase-database.js"></script>
-    <script defer src="/__/firebase/7.14.2/firebase-messaging.js"></script>
-    <script defer src="/__/firebase/7.14.2/firebase-storage.js"></script>
-    <!-- initialize the SDK after all desired features are loaded -->
-    <script defer src="/__/firebase/init.js"></script>
-    <script defer src="/js/database.js"></script>
-    <script defer src="/js/poker.js"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple poker</title>
 
+  <!-- update the version number as needed -->
+  <script defer src="/__/firebase/7.14.2/firebase-app.js"></script>
+  <!-- include only the Firebase features as you need -->
+  <script defer src="/__/firebase/7.14.2/firebase-auth.js"></script>
+  <script defer src="/__/firebase/7.14.2/firebase-database.js"></script>
+  <script defer src="/__/firebase/7.14.2/firebase-messaging.js"></script>
+  <script defer src="/__/firebase/7.14.2/firebase-storage.js"></script>
+  <!-- initialize the SDK after all desired features are loaded -->
+  <script defer src="/__/firebase/init.js"></script>
+  <script defer src="/js/database.js"></script>
+  <script defer src="/js/poker.js"></script>
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
+  <script>
+    function outputHand(hand, combo) {
+      var str = "";
+      for (var i in hand) {
+        str += getCard(hand[i]).text + " ";
       }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
-    </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
-    <div id="user">User: not logged in</div>
-    <div id="buttons" style="display:none">
-       <form>
-         <input type="button" value="login" onclick="login();"/>
-         <input type="button" value="write" onclick="writeToDB();"/>
-         <input type="button" value="read" onclick="readFromDB();"/>
-       </form>
-    </div>
+      if (combo) {
+        str += combo.combinationName;
+      }
+      return str;
+    }
 
+    function playerText(game, player, playersTurn) {
+      var draw = game.draws ? game.draws[player.id] : null;
+      if (playersTurn) {
+        return "Player " + player.name + " is doing their turn";
+      }
+      if (!draw) {
+        return "Player " + player.name + " is waiting for their turn";
+      }
+      return "Player " + player.name + " exchanged " + draw.length + " cards";
+    }
+    function exchange() {
+      var cards=[];
+      for (var i = 0; i < 5; i++) {
+        var checkbox = document.getElementById('xch'+i);
+        if (checkbox.checked) {
+          cards.push(i);
+        }
+      }
+      exchangeCards(globalUser.uid, cards, renderGame);
+    }
+
+    function renderGameInFlight(game, userId) {
+      var contents = "";
+      var previousExchanged = true;
+      var yourTurn = false;
+      var yourHand = getHand(game, userId);
+      for (i in game.players) {
+        var player = game.players[i];
+        var playerExchanged = game.draws && game.draws[player.id];
+        var playersTurn = previousExchanged && !playerExchanged;
+        if (player.id == userId) {
+          contents += "<b>Your hand:</b> " + outputHand(yourHand);
+          if (playersTurn) {
+            yourTurn = true;
+            contents += "<span style='color:green'> Your turn</span>";
+          }
+        } else {
+          contents += playerText(game, player, playersTurn);
+        }
+        contents += "<br/>";
+        previousExchanged = playerExchanged;
+      }
+      if (yourTurn) {
+        contents += "<p/>Select cards to exchange:<br/>"
+        contents += "<form>";
+        for (var i in yourHand) {
+          contents += "<input type='checkbox' id='xch" + i + "' name='xch"+i+ "'/>";
+          contents += "<label for='xch"+i+"'>" + getCard(yourHand[i]).text;
+          contents += "</label>";
+        }
+        contents +=
+          "<input type='button' value='exchange' onclick='exchange();'/>" +
+          "</form>";
+      }
+      return contents
+    }
+
+    function renderGameResults(results, userId) {
+      var str = "";
+      for (i in results) {
+        var playerInfo = results[i];
+        if (playerInfo.id == userId) {
+          str += "<b>Your hand:</b> "
+        } else {
+          str += "Player " + playerInfo.name + ":"
+        }
+        str += outputHand(playerInfo.hand, playerInfo.combo);
+        if (playerInfo.wins) {
+          str += " wins";
+        }
+        if (playerInfo.loses) {
+          str += " loses";
+        }
+        str += "<br/>"
+      }
+      return str;
+    }
+
+    function getGameText(game) {
+      if (!game) {
+        return "No active games";
+      }
+      var userId = globalUser.uid;
+      var results = getResults(game);
+      if (results) {
+        return renderGameResults(results, userId);
+      }
+      return renderGameInFlight(game, userId);
+    }
+
+    function renderGame() {
+      if (!globalUser || !globalUser.uid) {
+        document.getElementById('game').innerHTML = "Please login";
+      }
+      var userId = globalUser.uid;
+      getGame(userId, function(game) {
+        document.getElementById('game').innerHTML = getGameText(game);
+      });
+    }
+  </script>
+</head>
+
+<body>
+  <p id="load">Firebase SDK Loading&hellip;</p>
+  <div id="user">User: not logged in</div>
+  <div id="buttons" style="display:none">
+    <form>
+      <input type="button" value="login" onclick="login();" />
+      <input type="button" value="Start game" onclick="startTestGame(renderGame);" />
+    </form>
+    <p/>
+    <div id="game">
+      No active games
+      </form>
+    </div>
+    <p/>
     <script>
-      // function updateLogin() {
-      //   document.getElementById('load').remove();
-      // }
-      document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function() {
         // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
         // // The Firebase SDK is initialized and available here!
         //
-         firebase.auth().onAuthStateChanged(user => {
-            globalUser = user;
-            document.getElementById('user').innerHTML = "User: " + user.email;
-          });
+        firebase.auth().onAuthStateChanged(user => {
+          globalUser = user;
+          document.getElementById('user').innerHTML = "User: " + user.email;
+          renderGame();
+        });
         // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
         // firebase.messaging().requestPermission().then(() => { });
         // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
@@ -80,5 +174,6 @@
         }
       });
     </script>
-  </body>
+</body>
+
 </html>

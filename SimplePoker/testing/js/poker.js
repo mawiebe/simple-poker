@@ -1,13 +1,13 @@
 function testDraw() {
   var errors = [];
-  var users = ['zhenya', 'misha'];
+  var users = [{id:'123', name:'zhenya'}, {id:'456', name:'misha'}];
   var game = createGame(users, 4);
 
-  draw(game, 'misha', [0, 3]);
-  draw(game, 'zhenya', [2, 3, 4]);
+  draw(game, '456', [0, 3]);
+  draw(game, '123', [2, 3, 4]);
 
-  var zhand = getHand(game, 'zhenya');
-  var mhand = getHand(game, 'misha');
+  var zhand = getHand(game, '123');
+  var mhand = getHand(game, '456');
   // Zhenya's non-swapped cards
   expect(zhand[0] == game.deck[0], "Z1", errors);
   expect(zhand[1] == game.deck[2], "Z2", errors);
