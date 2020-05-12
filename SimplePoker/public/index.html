@@ -15,8 +15,8 @@
   <script defer src="/__/firebase/7.14.2/firebase-storage.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="/js/database.js"></script>
-  <script defer src="/js/poker.js"></script>
+  <script defer src="/js/database.js?cbust=11"></script>
+  <script defer src="/js/poker.js?cbust=11"></script>
 
   <script>
     function outputHand(hand, combo) {
@@ -40,15 +40,16 @@
       }
       return "Player " + player.name + " exchanged " + draw.length + " cards";
     }
+
     function exchange() {
-      var cards=[];
+      var cards = [];
       for (var i = 0; i < 5; i++) {
-        var checkbox = document.getElementById('xch'+i);
+        var checkbox = document.getElementById('xch' + i);
         if (checkbox.checked) {
           cards.push(i);
         }
       }
-      exchangeCards(globalUser.uid, cards, renderGame);
+      exchangeCards(cards);
     }
 
     function renderGameInFlight(game, userId) {
@@ -76,8 +77,8 @@
         contents += "<p/>Select cards to exchange:<br/>"
         contents += "<form>";
         for (var i in yourHand) {
-          contents += "<input type='checkbox' id='xch" + i + "' name='xch"+i+ "'/>";
-          contents += "<label for='xch"+i+"'>" + getCard(yourHand[i]).text;
+          contents += "<input type='checkbox' id='xch" + i + "' name='xch" + i + "'/>";
+          contents += "<label for='xch" + i + "'>" + getCard(yourHand[i]).text;
           contents += "</label>";
         }
         contents +=
@@ -121,13 +122,67 @@
     }
 
     function renderGame() {
-      if (!globalUser || !globalUser.uid) {
+      if (!currentUserId) {
         document.getElementById('game').innerHTML = "Please login";
+      } else {
+        document.getElementById('game').innerHTML = getGameText(currentGame);
       }
-      var userId = globalUser.uid;
-      getGame(userId, function(game) {
-        document.getElementById('game').innerHTML = getGameText(game);
-      });
+    }
+
+    function startTheGame() {
+      if (selectedUsers.size <= 1) {
+        console.error("Not enough players");
+        return;
+      }
+      var players = [];
+      for (user in selectedUsers) {
+        players.push({
+          id: user,
+          name: allUsers[user].name
+        });
+      }
+      startGame(players);
+    }
+
+    var selectedUsers = {};
+
+    function updateSelection() {
+      var selection = {};
+      var count = 0;
+      for (user in allUsers) {
+        var checkbox = document.getElementById("u" + user);
+        if (checkbox && checkbox.checked) {
+          selection[user] = 1;
+          count++;
+        }
+      }
+      selectedUsers = selection;
+      document.getElementById("start").disabled = (count > 1 ? null : "disabled");
+    }
+
+    function renderUsers() {
+      if (allUsers == null) {
+        return;
+      }
+      if (globalUser != null && allUsers[globalUser.uid]) {
+        document.getElementById('user').innerHTML =
+          "User: " + allUsers[globalUser.uid].name;
+      }
+      var contents = "";
+      for (user in allUsers) {
+        contents += "<input type='checkbox' id='u" + user + "' name='u" + user + "' ";
+        if (selectedUsers[user]) {
+          contents += "checked ";
+        }
+        contents += "onclick='updateSelection()'/>";
+
+        contents += "<label for='u" + user + "'>" + allUsers[user].name + ", ";
+        contents += allUsers[user].email;
+        contents += "</label><br/>";
+      }
+      contents += '<input type="button" id="start" value="Start game" disabled onclick="startTheGame();" />';
+
+      document.getElementById("users").innerHTML = contents;
     }
   </script>
 </head>
@@ -138,23 +193,27 @@
   <div id="buttons" style="display:none">
     <form>
       <input type="button" value="login" onclick="login();" />
-      <input type="button" value="Start game" onclick="startTestGame(renderGame);" />
     </form>
-    <p/>
+    <form id="users"></form>
+    <p />
     <div id="game">
       No active games
       </form>
     </div>
-    <p/>
+    <p />
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+      document.addEventListener('DOMContentLoaded', function() {
         // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
         // // The Firebase SDK is initialized and available here!
         //
         firebase.auth().onAuthStateChanged(user => {
           globalUser = user;
-          document.getElementById('user').innerHTML = "User: " + user.email;
-          renderGame();
+          if (checkUser()) {
+            renderUsers();
+          } else {
+            document.getElementById('user').innerHTML = "User: " + user.email;
+          }
+          changeUser(user.uid);
         });
         // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
         // firebase.messaging().requestPermission().then(() => { });
@@ -167,7 +226,7 @@
           let features = ['auth', 'database', 'messaging', 'storage'].filter(feature => typeof app[feature] === 'function');
           document.getElementById('load').remove();
           document.getElementById('buttons').style.display = 'block';
-
+          listUsers();
         } catch (e) {
           console.error(e);
           document.getElementById('load').innerHTML = 'Error loading the Firebase SDK, check the console.';
