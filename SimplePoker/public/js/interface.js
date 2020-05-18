@@ -1,10 +1,7 @@
 const GameState = Object.freeze({
-  WaitingForStart: 0,   // For new games. Accepting players until dealer
-                        // presses "deal"
-  WaitingForPlayers: 1, // For follow-up games. Waiting for all pre-registered
-                        // players to join.
-  WaitingForTurn: 2,    // Waiting for a player to make their turn
-  Showdown: 3,          // Game finished.
+  WaitingForJoins: 0,
+  WaitingForExchange: 1,
+  Showdown: 2,
 });
 
 const PlayerResult = Object.freeze({
