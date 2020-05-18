@@ -1,7 +1,8 @@
 const GameState = Object.freeze({
-  WaitingForJoins: 0,
-  WaitingForExchange: 1,
-  Showdown: 2,
+  WaitingForStart: 0,   // For new games. Accepting players until dealer
+                        // presses "deal"
+  WaitingForTurn: 1,    // Waiting for a player to make their turn
+  Showdown: 2,          // Game finished.
 });
 
 const PlayerResult = Object.freeze({
@@ -10,21 +11,36 @@ const PlayerResult = Object.freeze({
   Lose: 2,
 });
 
+function InitWorld(onChange) {
+  // This function will init firebase and create all event listenets.
+  // When state of the world changes for the player, it will call onChange
+  // and pass it playerInfo with updated information. In fact this function
+  // will only have one playerInfo instance and will update its contents
+  // before calling onChange.
+}
 
-playerInfo = {  // World state for a players
-  system_ok : true,  // null when loading, false on failure
-  system_load_error: "",
+function Login() {
+  // Creates popup dialog to login with Google. When done calls onChange that
+  // was passed to InitWorld, with up-to-date playerInfo.
+}
 
-  change_user: function(){},
+
+playerInfo = {  // World state for a player
+  // Result of loading firebase
+  systemOk : true,       // null when loading, false on failure
+  systemLoadError: "",
+
   user :  {  // null if not logged in
     uid: "1234",
     name: "Zhenya".
 
-    set_name: function(name) {}
+    setName: function(name) {}
   },
 
-  games : [ //
-    {
+  // In version 1 it will only contain current and possibly previous game.
+  // In later versions we can support several games simultaniously.
+  games : {
+    "4321": {
       id: "4321",
       state: GameState.WaitingForExchange,
       players: [
@@ -33,8 +49,9 @@ playerInfo = {  // World state for a players
           dealer: true,
           theirTurn: true,
           // During showdown this will also contain:
-          // cards: Array of card object returned by getHand
-          // combination: object returned by getCombo.
+          //
+          // hand: [{rank: 1, suit:2}, ... ]
+          // handInfo: {combination: HandEnum.Flush, combinationName: "Flush"},
           // result: PlayerResult.Win
         },
         {
@@ -49,24 +66,25 @@ playerInfo = {  // World state for a players
           suit: 1
         },
         {
-          rank 12,
-          suit 0
+          rank:12,
+          suit: 0
         }
         //...
       ],
-      exchangeCards = function(cardIndices) {}  // exchange([0, 3,4])
+      exchangeCards: function(cardIndices) {}  // exchange([0, 3,4])
     }
-  ],
+  },
 
-  currentGame: games[0],
-  previousGame: game[1], // Only present if current game was created from
-                         // another one with identical set of players.
+  currentGame: games["4321"],
+  previousGame: game["5678"], // Only present if current game was created from
+                              // another one with identical set of players.
 
-  newGame = function () {} // creates a new game with only current player.
-  deal = function() {} // If current game is not started yet, and current person
-                       // is the dealer, starts it.
-                       // If current game is finished and the person should be
-                       // the next dealer, creates a new game with the same set
-                       // of players and current player as a daler, and starts
-                       // it.
+  newGame: function () {}, // creates a new game with only current player.
+  deal: function() {},  // If current game is not started yet, and current
+                        // person is the dealer, starts it.
+                        // If current game is finished and the person should be
+                        // the next dealer, creates a new game with the same set
+                        // of players and current player as a daler, and starts
+                        // it.
+  joinGame: function(id) {}
 };
