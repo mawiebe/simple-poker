@@ -1,7 +1,7 @@
 // Schema thoughts (not yet implemented)
 // /user/ - user information. Writable by user themself, readable by admin.
 // /user/$uid/info={name, email, currentGame} - information
-// /user/$uid/game/$gid/{id, hand, draw, ready_for_next_round} - current game
+// /user/$uid/game/$gid/{hand, draw} - current game
 //
 // /game-admin/$gid - private information about the game. Only visible to admin.
 //                    gid is generated here as the key.
@@ -18,7 +18,7 @@
 //    - waiting for people to decide about the next game.
 // /game-pub/$gid/players/$player_nr - information about the player.
 //                                     Keyed by number 0-player-count
-//   = {name, draw, draw_size,  hand[filled for showdown]}
+//   = {name, draw, draw_size, isDealer, hand[filled for showdown]}
 //   - draw_copy needed so that users don't change the draw later.
 //   - presence of draw_size means that user finished their turn. We can
 //     not rely on presense of draw_cc because empty array is stored as null.
@@ -26,3 +26,100 @@
 
 
 // TODO: notion of rotating dealer
+
+var globalOnChange = function () {}
+
+var globalPlayerInfo = {}
+
+function userInfoRef(uid) {
+  return firebase.database().ref('user/' + uid + "/info");
+}
+
+function setUserInfo(uid, email, name) {
+  var ref = userInfoRef(uid);
+  ref.child('email').set(email);
+  ref.child('name').set(name);
+}
+
+function User(uid, email) {
+  this.uid = uid;
+  this.email = email;
+  this.updateName = function(newName) {
+    setUserInfo(this.uid, this.email, newName);
+  }
+}
+
+function onUserChange(uid, email, defaultName) {
+  if (globalPlayerInfo.user && globalPlayerInfo.user.uid == uid) {
+    return; // already correct  information, nothing to do.
+  }
+
+  if (globalPlayerInfo.user) {
+    userInfoRef(globalPlayerInfo.user.uid).off('value');
+  }
+
+  // Queston: how do I ensure consistend refresh?
+  // - I can clear user here and on the first callback notice change of uid.
+  //   Disadvantage is that if in the middle code gets another onUserChange
+  //   request, code will forget to do ref().off().
+  // - I can remember new uid here and react on change of name and email
+  // - Maybe onGameChange should always call refresh regardless of whether
+  //   the game id changed?
+  globalPlayerInfo.user = new User(uid, email);the
+
+  globalOnChange(globalPlayerInfo);
+
+  userInfoRef(globalPlayerInfo.user.uid).on('value', function(snapshot) {
+    if (snapshot.val() == null) {
+      setUserInfo(uid, email, defaultName);  // This will call the function
+                                            // again as it updates the part
+                                            // of DB it is tied to.
+    } else {
+      globalPlayerInfo.user.name = snapshot.val().name;
+      globalPlayerInfo.user.email = snapshot.val().email;
+      onPlayerInfoChange(snapshot.val().currentGame);
+    }
+  });
+}
+
+function onPlayerInfoChange(newGameId) {
+  if (newGameId == globalPlayerInfo.currentGameId) {
+    // Invoke callback even if game stayed the same - if this function was
+    // called, somthing indeed changed.
+    globalOnChange(globalPlayerInfo);
+    return;
+  }
+
+  // TODO: load user/game and game-pub/
+
+}
+
+function initWorld(onChange) {
+  document.addEventListener('DOMContentLoaded', function () {
+    // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+    // // The Firebase SDK is initialized and available here!
+    //
+    firebase.auth().onAuthStateChanged(user => {
+      onUserChange(user.uid, user.email, user.displayName);
+    });
+    // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
+    // firebase.messaging().requestPermission().then(() => { });
+    // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
+    //
+    // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+
+    try {
+      let app = firebase.app();
+      let features = ['auth', 'database', 'messaging', 'storage'].filter(
+        feature => typeof app[feature] === 'function');
+      globalOnChange(globalPlayerInfo);
+    } catch (e) {
+      console.error(e);
+      globalPlayerInfo.systemOk = false;
+      globalPlayerInfo.systemLoadError =
+        'Error loading the Firebase SDK, check the console.';
+      globalOnChange(globalPlayerInfo);
+    }
+  });
+
+}

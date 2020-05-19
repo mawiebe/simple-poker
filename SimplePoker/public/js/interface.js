@@ -11,7 +11,7 @@ const PlayerResult = Object.freeze({
   Lose: 2,
 });
 
-function InitWorld(onChange) {
+function initWorld(onChange) {
   // This function will init firebase and create all event listenets.
   // When state of the world changes for the player, it will call onChange
   // and pass it playerInfo with updated information. In fact this function
@@ -19,7 +19,7 @@ function InitWorld(onChange) {
   // before calling onChange.
 }
 
-function Login() {
+function login() {
   // Creates popup dialog to login with Google. When done calls onChange that
   // was passed to InitWorld, with up-to-date playerInfo.
 }
