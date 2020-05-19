@@ -32,7 +32,10 @@ playerInfo = {  // World state for a player
 
   user :  {  // null if not logged in
     uid: "1234",
-    name: "Zhenya".
+    name: "Zhenya",
+
+    lastActionResult: "Failed to go to the next round, "+
+                      "because previous one is not finished",
 
     setName: function(name) {}
   },

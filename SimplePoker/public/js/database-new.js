@@ -1,7 +1,7 @@
 // Schema thoughts (not yet implemented)
 // /user/ - user information. Writable by user themself, readable by admin.
-// /user/$uid/info={name, email, currentGame} - information
-// /user/$uid/game/$gid/{hand, draw} - current game
+// /user/$uid/info={name, email, currentGame, newGameRequested} - information
+// /user/$uid/game/$gid/{hand, draw, yourTurn} - current game
 //
 // /game-admin/$gid - private information about the game. Only visible to admin.
 //                    gid is generated here as the key.
@@ -36,19 +36,21 @@ function userInfoRef(uid) {
 }
 
 function setUserInfo(uid, email, name) {
-  var ref = userInfoRef(uid);
-  ref.child('email').set(email);
-  ref.child('name').set(name);
+  userInfoRef(uid).update({
+    email: email,
+    name: name
+  });
 }
 
 function User(uid, email) {
   this.uid = uid;
   this.email = email;
-  this.updateName = function(newName) {
+  this.updateName = function (newName) {
     setUserInfo(this.uid, this.email, newName);
   }
 }
 
+// Invoked when user logs in/changes login.
 function onUserChange(uid, email, defaultName) {
   if (globalPlayerInfo.user && globalPlayerInfo.user.uid == uid) {
     return; // already correct  information, nothing to do.
@@ -58,22 +60,15 @@ function onUserChange(uid, email, defaultName) {
     userInfoRef(globalPlayerInfo.user.uid).off('value');
   }
 
-  // Queston: how do I ensure consistend refresh?
-  // - I can clear user here and on the first callback notice change of uid.
-  //   Disadvantage is that if in the middle code gets another onUserChange
-  //   request, code will forget to do ref().off().
-  // - I can remember new uid here and react on change of name and email
-  // - Maybe onGameChange should always call refresh regardless of whether
-  //   the game id changed?
-  globalPlayerInfo.user = new User(uid, email);the
+  globalPlayerInfo.user = new User(uid, email);
 
   globalOnChange(globalPlayerInfo);
 
-  userInfoRef(globalPlayerInfo.user.uid).on('value', function(snapshot) {
+  userInfoRef(globalPlayerInfo.user.uid).on('value', function (snapshot) {
     if (snapshot.val() == null) {
-      setUserInfo(uid, email, defaultName);  // This will call the function
-                                            // again as it updates the part
-                                            // of DB it is tied to.
+      setUserInfo(uid, email, defaultName); // This will call the function
+      // again as it updates the part
+      // of DB it is tied to.
     } else {
       globalPlayerInfo.user.name = snapshot.val().name;
       globalPlayerInfo.user.email = snapshot.val().email;
@@ -82,6 +77,7 @@ function onUserChange(uid, email, defaultName) {
   });
 }
 
+// Invoked when player's data is change in the database.
 function onPlayerInfoChange(newGameId) {
   if (newGameId == globalPlayerInfo.currentGameId) {
     // Invoke callback even if game stayed the same - if this function was
