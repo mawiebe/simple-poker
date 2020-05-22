@@ -34,7 +34,7 @@ playerInfo = {  // World state for a player
     uid: "1234",
     name: "Zhenya",
 
-    lastActionResult: "Failed to go to the next round, "+
+    lastActionResult: "Failed to go to the next round, " +
                       "because previous one is not finished",
 
     setName: function(name) {}
