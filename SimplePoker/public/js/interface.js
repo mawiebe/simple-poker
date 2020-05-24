@@ -34,53 +34,47 @@ playerInfo = {  // World state for a player
     uid: "1234",
     name: "Zhenya",
 
-    lastActionResult: "Failed to go to the next round, " +
-                      "because previous one is not finished",
-
     setName: function(name) {}
   },
 
-  // In version 1 it will only contain current and possibly previous game.
+  // In version 1 we only have one game
   // In later versions we can support several games simultaniously.
-  games : {
-    "4321": {
-      id: "4321",
-      state: GameState.WaitingForExchange,
-      players: [
-        {
-          name: Zhenya,
-          dealer: true,
-          theirTurn: true,
-          // During showdown this will also contain:
-          //
-          // hand: [{rank: 1, suit:2}, ... ]
-          // handInfo: {combination: HandEnum.Flush, combinationName: "Flush"},
-          // result: PlayerResult.Win
-        },
-        {
-          name: Evgeny,
-          draw: [1, 3, 4],  // indices of cards that the player exchanged
-        }
-      ],
-      myPosition: 2,
-      myHand: [
-        {
-          rank: 0, // 2♥, see ranks[] and suits[] in poker.js
-          suit: 1
-        },
-        {
-          rank:12,
-          suit: 0
-        }
-        //...
-      ],
-      exchangeCards: function(cardIndices) {}  // exchange([0, 3,4])
-    }
+  currentGameId: "4321",
+  currentGame: {
+    state: GameState.WaitingForExchange,
+    players: [
+      {
+        name: Zhenya,
+        dealer: true,
+        theirTurn: true,
+        previousWinner: true,
+        // During showdown this will also contain:
+        //
+        // hand: [{rank: 1, suit:2}, ... ]
+        // handInfo: {combination: HandEnum.Flush, combinationName: "Flush"},
+        // result: PlayerResult.Win
+      },
+      {
+        name: Evgeny,
+        draw: [1, 3, 4],  // indices of cards that the player exchanged
+        previousLoser: true,
+      }
+    ],
+    myPosition: 2,
+    myHand: [
+      {
+        rank: 0, // 2♥, see ranks[] and suits[] in poker.js
+        suit: 1
+      },
+      {
+        rank:12,
+        suit: 0
+      }
+      //...
+    ],
+    exchangeCards: function(cardIndices) {}  // exchange([0, 3,4])
   },
 
-  currentGame: games["4321"],
-  previousGame: game["5678"], // Only present if current game was created from
-                              // another one with identical set of players.
 
   newGame: function () {}, // creates a new game with only current player.
   deal: function() {},  // If current game is not started yet, and current

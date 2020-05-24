@@ -1,7 +1,7 @@
 // Schema thoughts (not yet implemented)
 // /user/ - user information. Writable by user themself, readable by admin.
-// /user/$uid/info={name, email, currentGame, newGameRequested} - information
-// /user/$uid/game/$gid/{hand, draw, yourTurn} - current game
+// /user/$uid/info={name, email, currentGame} - information
+// /user/$uid/game/$gid/{hand, draw} - current game
 //
 // /game-admin/$gid - private information about the game. Only visible to admin.
 //                    gid is generated here as the key.
@@ -10,7 +10,7 @@
 //
 // /game-pub/$gid/ - public info about game. Read-only for everyone, writeable
 //                   by admin. Gid is taken by the game above
-//    ={status, next_game_id, previous_game_id}.
+//    ={status}.
 //    Statuses
 //    - Waiting for people to join
 //    - waiting for a turn
@@ -18,22 +18,54 @@
 //    - waiting for people to decide about the next game.
 // /game-pub/$gid/players/$player_nr - information about the player.
 //                                     Keyed by number 0-player-count
-//   = {name, draw, draw_size, isDealer, hand[filled for showdown]}
+//   = {name, draw, draw_size, isDealer, hand[filled for showdown],
+//      previousLoser, previousWinner}
 //   - draw_copy needed so that users don't change the draw later.
 //   - presence of draw_size means that user finished their turn. We can
 //     not rely on presense of draw_cc because empty array is stored as null.
 //
 
 
-// TODO: notion of rotating dealer
-
+// A callback to call when something changes. Client passes it to initWorld,
+// which saves it in this variable. Defaults to a no-op function.
 var globalOnChange = function () {}
+
+
+function DbTracker(callback) {
+  this.callback = callback;
+  this.setPath = function(path) {
+    if (this.path == path) {
+      return;
+    }
+    if (this.path) {
+      firebase.database.ref(this.path).off('value');
+    }
+    this.path = path;
+    firebase.database.ref(this.path).on('value', callback);
+  }
+}
+
+var userInfoTracker = new DbTracker(function(snapshot){});
+var gameInfoTracker = new DbTracker(function(snapshot){});
+var playersGameTracker = new DbTracker(function(snapshot){});
+
+var currenUserTrackingvar currenUserTracking
+
+function userInfoPath(uid) {
+  return 'user/' + uid + '/info';
+}
+
+function gameInfoPath(gid) {
+  return 'game-pub/' + gid;
+}
+
+function playersGamePath(uid, gid) {
+  return 'user/' + uid + '/game/' + gid;
+}
+
 
 var globalPlayerInfo = {}
 
-function userInfoRef(uid) {
-  return firebase.database().ref('user/' + uid + "/info");
-}
 
 function setUserInfo(uid, email, name) {
   userInfoRef(uid).update({
@@ -62,8 +94,6 @@ function onUserChange(uid, email, defaultName) {
 
   globalPlayerInfo.user = new User(uid, email);
 
-  globalOnChange(globalPlayerInfo);
-
   userInfoRef(globalPlayerInfo.user.uid).on('value', function (snapshot) {
     if (snapshot.val() == null) {
       setUserInfo(uid, email, defaultName); // This will call the function
@@ -85,6 +115,25 @@ function onPlayerInfoChange(newGameId) {
     globalOnChange(globalPlayerInfo);
     return;
   }
+
+  if (globalPlayerInfo.currentGameId) {
+    gameInfoRef(globalPlayerInfo.currentGameId).off('value');
+  }
+  globalPlayerInfo.currentGameId = newGameId;
+  globalPlayerInfo.currentGame = {};
+  globalPlayerInfo.currentGame.exchangeCards = function(cards) {
+    exchangeCards(globalPlayerInfo.currentGameId, cards);
+  }
+
+
+  gameInfoRef(globalPlayerInfo.currentGameId).on('value', function(snapshot) {
+    if (snapshot.val()) {
+      globalPlayerInfo.currentGame.state = snapshot.val().state;
+      globalPlayerInfo.currentGame.players = snapshot.val().players;
+    }
+    globalOnChange(globalPlayerInfo);
+  });
+
 
   // TODO: load user/game and game-pub/
 
