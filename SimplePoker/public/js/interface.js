@@ -60,7 +60,7 @@ playerInfo = {  // World state for a player
         previousLoser: true,
       }
     ],
-    myPosition: 2,
+    myPosition: 1,
     myHand: [
       {
         rank: 0, // 2♥, see ranks[] and suits[] in poker.js

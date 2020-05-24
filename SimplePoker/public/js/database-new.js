@@ -1,7 +1,7 @@
 // Schema thoughts (not yet implemented)
 // /user/ - user information. Writable by user themself, readable by admin.
 // /user/$uid/info={name, email, currentGame} - information
-// /user/$uid/game/$gid/{hand, draw} - current game
+// /user/$uid/game/$gid/{hand, myPosition} - current game
 //
 // /game-admin/$gid - private information about the game. Only visible to admin.
 //                    gid is generated here as the key.
@@ -25,118 +25,151 @@
 //     not rely on presense of draw_cc because empty array is stored as null.
 //
 
-
-// A callback to call when something changes. Client passes it to initWorld,
-// which saves it in this variable. Defaults to a no-op function.
-var globalOnChange = function () {}
-
-
-function DbTracker(callback) {
+// Tool that helps to track a part of a database and switch to another part
+// when needed.
+function DbTracker(pathGetter, callback) {
   this.callback = callback;
-  this.setPath = function(path) {
+  // returns whether any changes were made
+  this.updatePath = function () {
+    var path = pathGetter();
     if (this.path == path) {
-      return;
+      return false;
     }
     if (this.path) {
       firebase.database.ref(this.path).off('value');
     }
     this.path = path;
     firebase.database.ref(this.path).on('value', callback);
+    return true;
   }
 }
 
-var userInfoTracker = new DbTracker(function(snapshot){});
-var gameInfoTracker = new DbTracker(function(snapshot){});
-var playersGameTracker = new DbTracker(function(snapshot){});
+// A callback to call when something changes. Client passes it to initWorld,
+// which saves it in this variable. Defaults to a no-op function.
+var globalOnChange = function () {}
 
-var currenUserTrackingvar currenUserTracking
-
-function userInfoPath(uid) {
-  return 'user/' + uid + '/info';
+function userInfoPath() {
+  return 'user/' + globalPlayerInfo.user.uid + '/info';
 }
 
-function gameInfoPath(gid) {
-  return 'game-pub/' + gid;
+function gameInfoPath() {
+  return 'game-pub/' + globalPlayerInfo.currentGameId;
 }
 
-function playersGamePath(uid, gid) {
-  return 'user/' + uid + '/game/' + gid;
+function playersGamePath() {
+  return 'user/' + globalPlayerInfo.user.uid + '/game/' +
+    globalPlayerInfo.currentGameId;
 }
-
 
 var globalPlayerInfo = {}
 
-
-function setUserInfo(uid, email, name) {
-  userInfoRef(uid).update({
+function updateUserInfo(uid, email, name) {
+  firebase.database.ref(userInfoPath(uid)).update({
     email: email,
     name: name
   });
 }
 
-function User(uid, email) {
+function exchangeCards(cards) {
+  // TODO: call server
+}
+
+// Below are 3 trackers that are invoked either when information is loaded from
+// database for the first time or when it changes in database. They track
+// 1) user general information 2) public information about current game
+// 3) current user's private information about current game.
+
+var userInfoTracker = new DbTracker(userInfoPath, function (snapshot) {
+  var user = globalPlayerInfo.user;
+
+  if (!user || user.uid != snapshot.key()) {
+    console.error("Unexpected user info callback. Current user: " +
+      JSON.stringify(user) +
+      "Snapshot key: " + snapshot.key() +
+      "Snapshot val: " + JSON.stringify(snapshot.val()));
+    return;
+  }
+  if (snapshot.val() == null) {
+    // This will call the function again as it updates the part of DB it is
+    // tied to.
+    updateUserInfo(snapshot.key(), user.email,user.defaultName);
+  } else {
+    user.email = snapshot.val().email;
+    user.name = snapshot.val().name;
+    globalPlayerInfo.currentGameId = snapshot.val().currentGame;
+    globalPlayerInfo.currentGame = {}
+    globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
+    if (!gameInfoTracker.updatePath() && !playersGameTracker.updatePath()) {
+      // Invoke callback even if game stayed the same - if this function was
+      // called, somthing indeed changed.
+      globalOnChange(globalPlayerInfo);
+      return;
+    }
+  }
+});
+
+var gameInfoTracker = new DbTracker(gameInfoPath, function (snapshot) {
+  // check state validity
+  if (globalPlayerInfo.currentGameId != snapshot.key() ||
+    !globalPlayerInfo.currentGame) {
+    console.error("Unexpected game info callback. CurrentGameId: " +
+      globalPlayerInfo.currentGameId +
+      "Current Game: " + JSON.stringify(globalPlayerInfo.currentGame) +
+      "Snapshot key: " + snapshot.key() +
+      "Snapshot val: " + JSON.stringify(snapshot.val()));
+    return;
+  }
+  // Load public info about the game to the global object
+  if (snapshot.val()) {
+    globalPlayerInfo.currentGame.status = snapshot.val().status;
+    globalPlayerInfo.currentGame.players = snapshot.val().players;
+  }
+
+});
+var playersGameTracker = new DbTracker(playersGamePath, function (snapshot) {
+  // check state validity
+  if (globalPlayerInfo.currentGameId != snapshot.key() ||
+    !globalPlayerInfo.currentGame) {
+    console.error("Unexpected player's game callback. CurrentGameId: " +
+      globalPlayerInfo.currentGameId +
+      "Current Game: " + JSON.stringify(globalPlayerInfo.currentGame) +
+      "Snapshot key: " + snapshot.key() +
+      "Snapshot val: " + JSON.stringify(snapshot.val()));
+    return;
+  }
+  // Load players private info about the game to the global object
+  if (snapshot.val()) {
+    globalPlayerInfo.currentGame.myPosition = snapshot.val().myPosition;
+    globalPlayerInfo.currentGame.myHand = []
+    for (x in snapshot.val().hand) {
+      globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[x]));
+    }
+  }
+});
+
+
+function User(uid, email, defaultName) {
   this.uid = uid;
   this.email = email;
+  // Todo: think whether I can just use name. If not, I should probably
+  // change email handling too.
+  this.defaultName = defaultName;
   this.updateName = function (newName) {
-    setUserInfo(this.uid, this.email, newName);
+    updateUserInfo(this.uid, this.email, newName);
   }
 }
 
 // Invoked when user logs in/changes login.
 function onUserChange(uid, email, defaultName) {
-  if (globalPlayerInfo.user && globalPlayerInfo.user.uid == uid) {
-    return; // already correct  information, nothing to do.
+  if (!globalPlayerInfo.user || uid != globalPlayerInfo.uid) {
+    globalPlayerInfo.user = new User(uid, email, defaultName);
   }
 
-  if (globalPlayerInfo.user) {
-    userInfoRef(globalPlayerInfo.user.uid).off('value');
+  // if updatePath returns true, no need for refresh - it will happen on
+  // result from DB.
+  if (!userInfoTracker.updatePath()) {
+    globalOnChange(globalPlayerInfo());
   }
-
-  globalPlayerInfo.user = new User(uid, email);
-
-  userInfoRef(globalPlayerInfo.user.uid).on('value', function (snapshot) {
-    if (snapshot.val() == null) {
-      setUserInfo(uid, email, defaultName); // This will call the function
-      // again as it updates the part
-      // of DB it is tied to.
-    } else {
-      globalPlayerInfo.user.name = snapshot.val().name;
-      globalPlayerInfo.user.email = snapshot.val().email;
-      onPlayerInfoChange(snapshot.val().currentGame);
-    }
-  });
-}
-
-// Invoked when player's data is change in the database.
-function onPlayerInfoChange(newGameId) {
-  if (newGameId == globalPlayerInfo.currentGameId) {
-    // Invoke callback even if game stayed the same - if this function was
-    // called, somthing indeed changed.
-    globalOnChange(globalPlayerInfo);
-    return;
-  }
-
-  if (globalPlayerInfo.currentGameId) {
-    gameInfoRef(globalPlayerInfo.currentGameId).off('value');
-  }
-  globalPlayerInfo.currentGameId = newGameId;
-  globalPlayerInfo.currentGame = {};
-  globalPlayerInfo.currentGame.exchangeCards = function(cards) {
-    exchangeCards(globalPlayerInfo.currentGameId, cards);
-  }
-
-
-  gameInfoRef(globalPlayerInfo.currentGameId).on('value', function(snapshot) {
-    if (snapshot.val()) {
-      globalPlayerInfo.currentGame.state = snapshot.val().state;
-      globalPlayerInfo.currentGame.players = snapshot.val().players;
-    }
-    globalOnChange(globalPlayerInfo);
-  });
-
-
-  // TODO: load user/game and game-pub/
-
 }
 
 function initWorld(onChange) {
@@ -155,8 +188,6 @@ function initWorld(onChange) {
 
     try {
       let app = firebase.app();
-      let features = ['auth', 'database', 'messaging', 'storage'].filter(
-        feature => typeof app[feature] === 'function');
       globalOnChange(globalPlayerInfo);
     } catch (e) {
       console.error(e);
