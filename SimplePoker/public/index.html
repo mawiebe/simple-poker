@@ -16,6 +16,7 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
+  <script defer src="/js/shared.js?cbust=11"></script>
   <script defer src="/js/database.js?cbust=11"></script>
   <script defer src="/js/poker.js?cbust=11"></script>
 
@@ -185,10 +186,18 @@
 
       document.getElementById("users").innerHTML = contents;
     }
+    function updateUserInfo() {
+      if (globalUser) {
+        firebase.database().ref(userInfoPath(globalUser.uid)).update({
+          email: globalUser.email,
+          name: globalUser.displayName,
+        });
+      }
+    }
     function testFunctions() {
-      var helloWorld = firebase.functions().httpsCallable('helloWorld');
-      helloWorld({name: "Zhenya"}).then(function(result) {
-        alert(result.data.text);
+      var createGame = firebase.functions().httpsCallable('createGame');
+      createGame().then(function(result) {
+        alert(JSON.stringify(result.data));
       });
     }
   </script>
@@ -200,6 +209,7 @@
   <div id="buttons" style="display:none">
     <form>
       <input type="button" value="login" onclick="login();" />
+      <input type="button" value="write user data" onclick="updateUserInfo();" />
       <input type="button" value="test functions" onclick="testFunctions();" />
     </form>
     <form id="users"></form>

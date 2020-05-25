@@ -1,3 +1,5 @@
+// Not a real code, just an explanation of data representation.
+
 const GameState = Object.freeze({
   WaitingForStart: 0,   // For new games. Accepting players until dealer
                         // presses "deal"

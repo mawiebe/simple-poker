@@ -3,9 +3,19 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "game-pub": {
+      ".write": false,
+      ".read":  "auth != null",
+    },
+    "user": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
     "test": {
       ".read": true,
-      ".write": true      
+      ".write": true
     }
   }
 }

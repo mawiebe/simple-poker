@@ -1,29 +1,4 @@
-// Schema thoughts (not yet implemented)
-// /user/ - user information. Writable by user themself, readable by admin.
-// /user/$uid/info={name, email, currentGame} - information
-// /user/$uid/game/$gid/{hand, myPosition} - current game
-//
-// /game-admin/$gid - private information about the game. Only visible to admin.
-//                    gid is generated here as the key.
-// /game-admin/$gid/cards = {deck, discard_shuffle} - cards
-// /game-admin/$gid/players/$player_nr = {uid, draw_copy}
-//
-// /game-pub/$gid/ - public info about game. Read-only for everyone, writeable
-//                   by admin. Gid is taken by the game above
-//    ={status}.
-//    Statuses
-//    - Waiting for people to join
-//    - waiting for a turn
-//    - showdown
-//    - waiting for people to decide about the next game.
-// /game-pub/$gid/players/$player_nr - information about the player.
-//                                     Keyed by number 0-player-count
-//   = {name, draw, draw_size, isDealer, hand[filled for showdown],
-//      previousLoser, previousWinner}
-//   - draw_copy needed so that users don't change the draw later.
-//   - presence of draw_size means that user finished their turn. We can
-//     not rely on presense of draw_cc because empty array is stored as null.
-//
+// see shared.js for the schema
 
 // Tool that helps to track a part of a database and switch to another part
 // when needed.
@@ -36,10 +11,10 @@ function DbTracker(pathGetter, callback) {
       return false;
     }
     if (this.path) {
-      firebase.database.ref(this.path).off('value');
+      firebase.database().ref(this.path).off('value');
     }
     this.path = path;
-    firebase.database.ref(this.path).on('value', callback);
+    firebase.database().ref(this.path).on('value', callback);
     return true;
   }
 }
@@ -48,23 +23,10 @@ function DbTracker(pathGetter, callback) {
 // which saves it in this variable. Defaults to a no-op function.
 var globalOnChange = function () {}
 
-function userInfoPath() {
-  return 'user/' + globalPlayerInfo.user.uid + '/info';
-}
-
-function gameInfoPath() {
-  return 'game-pub/' + globalPlayerInfo.currentGameId;
-}
-
-function playersGamePath() {
-  return 'user/' + globalPlayerInfo.user.uid + '/game/' +
-    globalPlayerInfo.currentGameId;
-}
-
 var globalPlayerInfo = {}
 
 function updateUserInfo(uid, email, name) {
-  firebase.database.ref(userInfoPath(uid)).update({
+  firebase.database().ref(userInfoPath(uid)).update({
     email: email,
     name: name
   });
@@ -79,7 +41,21 @@ function exchangeCards(cards) {
 // 1) user general information 2) public information about current game
 // 3) current user's private information about current game.
 
-var userInfoTracker = new DbTracker(userInfoPath, function (snapshot) {
+function curentUserInfoPath() {
+  return userInfoPath(globalPlayerInfo.user.uid);
+}
+
+function currentGameInfoPath() {
+  return gameInfoPath(globalPlayerInfo.currentGameId);
+}
+
+function currentPlayersGamePath() {
+  return playersGamePath(globalPlayerInfo.user.uid,
+                         globalPlayerInfo.currentGameId);
+}
+
+
+var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
   var user = globalPlayerInfo.user;
 
   if (!user || user.uid != snapshot.key()) {
@@ -108,7 +84,7 @@ var userInfoTracker = new DbTracker(userInfoPath, function (snapshot) {
   }
 });
 
-var gameInfoTracker = new DbTracker(gameInfoPath, function (snapshot) {
+var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
   // check state validity
   if (globalPlayerInfo.currentGameId != snapshot.key() ||
     !globalPlayerInfo.currentGame) {
@@ -126,7 +102,8 @@ var gameInfoTracker = new DbTracker(gameInfoPath, function (snapshot) {
   }
 
 });
-var playersGameTracker = new DbTracker(playersGamePath, function (snapshot) {
+var playersGameTracker = new DbTracker(currentPlayersGamePath,
+                                       function (snapshot) {
   // check state validity
   if (globalPlayerInfo.currentGameId != snapshot.key() ||
     !globalPlayerInfo.currentGame) {
