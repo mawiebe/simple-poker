@@ -1,7 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
-
 const shared = require('./shared');
 const poker = require('./poker');
 
@@ -27,6 +26,7 @@ function checkCorrectGame(public, private){
   // Things to check:
   //  - number of players
   //  - only one is is dealer
+  //  - people exchanged in correct order.
   //  - status corresponds to presense of draws.
   //  - presense of result
   //  - what else?
@@ -56,9 +56,10 @@ async function loadGame(gid) {
 }
 
 
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
+// Exported functions below
+
+// Create empty game. It will wait for the players to join.
+// Gets user ID in auth and no arguments.
 exports.createGame = functions.https.onCall((data, context) => {
   if (!context.auth || !context.auth.uid) {
     return {error: "Could not get user ID"};
@@ -97,9 +98,13 @@ exports.createGame = functions.https.onCall((data, context) => {
     });
 
     resolve({gid: gid});
+    return;
   });
 });
 
+// Create a new round of a game. It takes an ID of a finished game, and creates
+// a new game with same players but who is the dealer shifts to the next player.
+// Gets user ID in auth and ID of the previous game as previousGame argument.
 exports.createNextRound = functions.https.onCall((data, context) => {
   if (!context.auth || !context.auth.uid) {
     return {error: "Could not get user ID"};
@@ -109,15 +114,20 @@ exports.createNextRound = functions.https.onCall((data, context) => {
     return {error: "Wrong previous game ID"};
   }
 
+  // Make the rest of the function async to be able to wait for database
+  // data.
   return new Promise(async function(resolve, reject) {
     var uid = context.auth.uid;
     var oldGame = loadGame(previousGame);
     if (oldGame.error) {
       resolve(oldGame);
+      return;
     }
-    if (oldGame.public.status != GameState.Showdown) {
+    if (oldGame.public.status != shared.GameState.Showdown) {
       resolve({error: "Can not play next round of unfinished game"});
+      return;
     }
+
     // TODO: check current user was in the game.
     var deck = poker.shuffleDeck();
     var gameRef = admin.database().ref(shared.gamePrivatePath).push({
@@ -125,6 +135,8 @@ exports.createNextRound = functions.https.onCall((data, context) => {
       cards: {deck: deck}
     });
     var gid = gameRef.key;
+
+    // Fill in public part of the game
     var gamePub = {
       status: GameState.WaitingForTurn;
       players: []
@@ -141,6 +153,8 @@ exports.createNextRound = functions.https.onCall((data, context) => {
       isDealer = oldPlayer.isDealer;
     }
     admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
+
+    // Fill in private part of the game
     for (var i in oldGame.private.players) {
       var uid = oldGame.private.players[i];
       admin.database().ref(shared.playersGamePath(uid, gid)).set({
@@ -153,6 +167,107 @@ exports.createNextRound = functions.https.onCall((data, context) => {
         currentGame: gid
       });
     }
-
+    // Return ID of the new game
     resolve({gid: gid});
+    return;
+  });
+});
+
+// Function for a user to join a game.
+// Takes user ID in auth and game ID in gid argument
+exports.joinGame = functions.https.onCall((data, context) => {
+  if (!context.auth || !context.auth.uid) {
+    return {error: "Could not get user ID"};
   }
+  if (!data.gid) {
+    return {error: "No game specified"}
+  }
+  // Make the rest of the function async to be able to wait for database
+  // data.
+  return new Promise(async function(resolve, reject) {
+    var uid = context.auth.uid;
+    var userInfoOrError = getUserInfo(uid);
+    if (userInfoOrError.error) {
+      resolve(userInfo);
+      return;
+    }
+
+    var game = loadGame(gid);
+    if (game.public.status != shared.GameState.WaitingForStart) {
+      resolve({error: "Can not load started game"});
+      return;
+    }
+
+    var uids = game.private.players;
+    if (!uids) {
+      resolve({error: "Game without players"});
+      return;
+    }
+
+    for (i in uids) {
+      if (uids[i] == uid) {
+        // Todo: switch current game
+        resolve({error: "You already joined."});
+        return;
+      }
+    }
+
+    // Add a player uid to private game info
+    var index = uids.length;
+    if (!index || !Number.isInteger(index) || index < 1) {
+      resolve({error : "Wrong players number: " + JSON.stringify(index)});
+      return;
+    }
+
+    admin.database().ref(shared.privateGamePath(gid)).update({
+      players: {
+        [index]: uid
+      }
+    });
+
+    admin.database().ref(shared.gameInfoPath(gid)).update({
+      players: {
+        [index]: {
+          name: userInfoOrError.name,
+        }
+      }
+    });
+
+    admin.database().ref(shared.playersGamePath(uid, gid)).set({
+      myPosition: index
+    });
+    admin.database().ref(shared.userInfoPath(uid)).update({
+      currentGame: gid
+    });
+
+    resolve({});
+    return;
+  });
+});
+
+// A function for a user to exchange cards. Checks that it's user's turn and
+// that the user is in the game.
+// Takes user ID in auth, game ID in gid argument and discarded cards in
+// discarded argument
+// 'discarded' should be a map with the keys being 0-based indices of discarded
+// cards. E.g. {0:1, 1:1, 3:1} will discard first, second and fourth card
+// in the hand. Value in the map does not matter.
+// exports.exchangeCards = functions.https.onCall((data, context) => {
+//   if (!context.auth || !context.auth.uid) {
+//     return {error: "Could not get user ID"};
+//   }
+//   if (!data.gid) {
+//     return {error: "No game specified"}
+//   }
+//   var cards = {};
+//   if (data.discarded) {
+//     for (var i in data.discarded) {
+//       if (Number.isInteger(i) && i > 0 && i < poker.handSize) {
+//         cards[i] = 1;
+//       } else {
+//         return {error: "Incorrect card to exchange: " + JSON.stringify(i)}
+//       }
+//     }
+//   }
+//
+// });

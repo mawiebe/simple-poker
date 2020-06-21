@@ -194,9 +194,15 @@
         });
       }
     }
-    function testFunctions() {
+    function testCreateGame() {
       var createGame = firebase.functions().httpsCallable('createGame');
       createGame().then(function(result) {
+        alert(JSON.stringify(result.data));
+      });
+    }
+    function testJoinGame() {
+      var createGame = firebase.functions().httpsCallable('joinGame');
+      createGame({gid: "-M88Kqa9tOFaKOMatnzz"}).then(function(result) {
         alert(JSON.stringify(result.data));
       });
     }
@@ -209,8 +215,9 @@
   <div id="buttons" style="display:none">
     <form>
       <input type="button" value="login" onclick="login();" />
-      <input type="button" value="write user data" onclick="updateUserInfo();" />
-      <input type="button" value="test functions" onclick="testFunctions();" />
+      <input type="button" value="test new write user data" onclick="updateUserInfo();" />
+      <input type="button" value="test new create game" onclick="testCreateGame();" />
+      <input type="button" value="test new join game" onclick="testJoinGame();" />
     </form>
     <form id="users"></form>
     <p />
