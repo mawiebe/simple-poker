@@ -68,7 +68,7 @@ exports.createGame = functions.https.onCall((data, context) => {
   // data.
   return new Promise(async function(resolve, reject) {
     var uid = context.auth.uid;
-    var userInfoOrError = getUserInfo(uid);
+    var userInfoOrError = await getUserInfo(uid);
     if (userInfoOrError.error) {
       resolve(userInfo);
       return;
@@ -105,73 +105,73 @@ exports.createGame = functions.https.onCall((data, context) => {
 // Create a new round of a game. It takes an ID of a finished game, and creates
 // a new game with same players but who is the dealer shifts to the next player.
 // Gets user ID in auth and ID of the previous game as previousGame argument.
-exports.createNextRound = functions.https.onCall((data, context) => {
-  if (!context.auth || !context.auth.uid) {
-    return {error: "Could not get user ID"};
-  }
-  var previousGame = data.previousGame;
-  if (!previousGame) {
-    return {error: "Wrong previous game ID"};
-  }
-
-  // Make the rest of the function async to be able to wait for database
-  // data.
-  return new Promise(async function(resolve, reject) {
-    var uid = context.auth.uid;
-    var oldGame = loadGame(previousGame);
-    if (oldGame.error) {
-      resolve(oldGame);
-      return;
-    }
-    if (oldGame.public.status != shared.GameState.Showdown) {
-      resolve({error: "Can not play next round of unfinished game"});
-      return;
-    }
-
-    // TODO: check current user was in the game.
-    var deck = poker.shuffleDeck();
-    var gameRef = admin.database().ref(shared.gamePrivatePath).push({
-      players: oldGame.private.players,
-      cards: {deck: deck}
-    });
-    var gid = gameRef.key;
-
-    // Fill in public part of the game
-    var gamePub = {
-      status: GameState.WaitingForTurn;
-      players: []
-    }
-    var isDealer =
-      oldGame.public.players[oldGame.public.players.length-1].isDealer;
-    for (int i = 0; i < oldGame.public.players.length; i++) {
-      var oldPlayer = oldGame.public.players[i];
-      gamePub.players.push({
-        name: oldPlayer.name,
-        isDealer: isDealer,   // Dealer is shifted by one
-        previousResult:oldPlayer.result
-      });
-      isDealer = oldPlayer.isDealer;
-    }
-    admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
-
-    // Fill in private part of the game
-    for (var i in oldGame.private.players) {
-      var uid = oldGame.private.players[i];
-      admin.database().ref(shared.playersGamePath(uid, gid)).set({
-        myPosition: i,
-        // Theoretically we should pick every 5h card but if cards are
-        // shuffled randomly it does not matter.
-        hand: deck.slice(i*poker.handSize, (i+1)*poker.handSize);
-      });
-      admin.database().ref(shared.userInfoPath(uid)).update({
-        currentGame: gid
-      });
-    }
-    // Return ID of the new game
-    resolve({gid: gid});
-    return;
-  });
-});
+// exports.createNextRound = functions.https.onCall((data, context) => {
+//   if (!context.auth || !context.auth.uid) {
+//     return {error: "Could not get user ID"};
+//   }
+//   var previousGame = data.previousGame;
+//   if (!previousGame) {
+//     return {error: "Wrong previous game ID"};
+//   }
+//
+//   // Make the rest of the function async to be able to wait for database
+//   // data.
+//   return new Promise(async function(resolve, reject) {
+//     var uid = context.auth.uid;
+//     var oldGame = await loadGame(previousGame);
+//     if (oldGame.error) {
+//       resolve(oldGame);
+//       return;
+//     }
+//     if (oldGame.public.status != shared.GameState.Showdown) {
+//       resolve({error: "Can not play next round of unfinished game"});
+//       return;
+//     }
+//
+//     // TODO: check current user was in the game.
+//     var deck = poker.shuffleDeck();
+//     var gameRef = admin.database().ref(shared.gamePrivatePath).push({
+//       players: oldGame.private.players,
+//       cards: {deck: deck}
+//     });
+//     var gid = gameRef.key;
+//
+//     // Fill in public part of the game
+//     var gamePub = {
+//       status: GameState.WaitingForTurn,
+//       players: []
+//     }
+//     var isDealer =
+//       oldGame.public.players[oldGame.public.players.length-1].isDealer;
+//     for (int i = 0; i < oldGame.public.players.length; i++) {
+//       var oldPlayer = oldGame.public.players[i];
+//       gamePub.players.push({
+//         name: oldPlayer.name,
+//         isDealer: isDealer,   // Dealer is shifted by one
+//         previousResult:oldPlayer.result
+//       });
+//       isDealer = oldPlayer.isDealer;
+//     }
+//     admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
+//
+//     // Fill in private part of the game
+//     for (var i in oldGame.private.players) {
+//       var uid = oldGame.private.players[i];
+//       admin.database().ref(shared.playersGamePath(uid, gid)).set({
+//         myPosition: i,
+//         // Theoretically we should pick every 5h card but if cards are
+//         // shuffled randomly it does not matter.
+//         hand: deck.slice(i*poker.handSize, (i+1)*poker.handSize);
+//       });
+//       admin.database().ref(shared.userInfoPath(uid)).update({
+//         currentGame: gid
+//       });
+//     }
+//     // Return ID of the new game
+//     resolve({gid: gid});
+//     return;
+//   });
+// });
 
 // Function for a user to join a game.
 // Takes user ID in auth and game ID in gid argument
@@ -179,22 +179,28 @@ exports.joinGame = functions.https.onCall((data, context) => {
   if (!context.auth || !context.auth.uid) {
     return {error: "Could not get user ID"};
   }
-  if (!data.gid) {
+  var gid = data.gid;
+  if (!gid) {
     return {error: "No game specified"}
   }
   // Make the rest of the function async to be able to wait for database
   // data.
   return new Promise(async function(resolve, reject) {
     var uid = context.auth.uid;
-    var userInfoOrError = getUserInfo(uid);
+    var userInfoOrError = await getUserInfo(uid);
     if (userInfoOrError.error) {
       resolve(userInfo);
       return;
     }
 
-    var game = loadGame(gid);
+    var game = await loadGame(gid);
+    if (game.error) {
+      resolve(game);
+      return;
+    }
+
     if (game.public.status != shared.GameState.WaitingForStart) {
-      resolve({error: "Can not load started game"});
+      resolve({error: "Can not join started game"});
       return;
     }
 
@@ -219,18 +225,14 @@ exports.joinGame = functions.https.onCall((data, context) => {
       return;
     }
 
-    admin.database().ref(shared.privateGamePath(gid)).update({
-      players: {
+    admin.database().ref(shared.privateGamePath(gid)).child("players").update({
         [index]: uid
-      }
     });
 
-    admin.database().ref(shared.gameInfoPath(gid)).update({
-      players: {
+    admin.database().ref(shared.gameInfoPath(gid)).child("players").update({
         [index]: {
           name: userInfoOrError.name,
         }
-      }
     });
 
     admin.database().ref(shared.playersGamePath(uid, gid)).set({
