@@ -21,18 +21,101 @@ async function getUserInfo(uid) {
   return userInfoSnapshot.val();
 }
 
-function checkCorrectGame(public, private){
-  // TODO: implement.
-  // Things to check:
-  //  - number of players
-  //  - only one is is dealer
-  //  - people exchanged in correct order.
-  //  - status corresponds to presense of draws.
-  //  - presense of result
-  //  - what else?
+function checkCorrectGame(public, private) {
+  if (!private.players || private.players.length < 1 ||
+    !public.players || public.players.length < 1 ||
+    private.players.length != public.players.length) {
+    return {error: "Incorrect players length"}
+  }
+  var playersSeen = {};
+  for (i in private.players) {
+    if (playersSeen[private.players[i]]) {
+      return {error: "Player is in the game twice"};
+    }
+    playersSeen[private.players[i]] = 1;
+  }
+  var numDealers = 0;
+  var numExchanged = 0;
+  var previousExchanged = !!public.players[public.players.length -1].drawSize;
+  var previousDealer = !!public.players[public.players.length -1].isDealer;
+
+  var numWinners = 0;
+  var numLosers = 0;
+  for (i in public.players) {
+    var playerInfo = public.players[i];
+    if (!playerInfo) {
+      return {error: "Player info missing"};
+    }
+    if (playerInfo.isDealer) {
+      numDealers ++;
+    }
+    var exchanged = !!playerInfo.drawSize;
+    if (exchanged) {
+      numExchanged ++;
+    }
+    if (exchanged && !previousExchanged && !previousDealer) {
+      return {error: "player exchanged out of order"};
+    }
+    if ((playerInfo.drawSize ? playerInfo.drawSize : 0) !=
+        (playerInfo.draw ? playerInfo.draw.length : 0)) {
+      return {error: "Inconsistent draw size in database"};
+    }
+
+    var showdown = (public.status == shared.GameState.Showdown);
+    if (showdown != (!!playerInfo.hand) || showdown != (!!playerInfo.result)) {
+        return {error: "Hand shown at incorrect moment"};
+    }
+    if (playerInfo.result == shared.PlayerResult.Win) {
+      numWinners++;
+    }
+    if (playerInfo.result == shared.PlayerResult.Lose) {
+      numLosers++;
+    }
+    previousExchanged = exchanged;
+    previousDealer = playerInfo.isDealer;
+  }
+  if (numDealers != 1) {
+    return {error: "Incorrect number of dealers"};
+  }
+  switch (public.status) {
+    case shared.GameState.WaitingForStart:
+      if (numExchanged > 0) {
+        return {error: "Exchanged before start"};
+      }
+      break;
+   case shared.GameState.WaitingForTurn:
+     if (numExchanged >= public.players.length) {
+       return {error: "Showdown did not happen"};
+     }
+     break;
+   case shared.GameState.Showdown:
+     if (numExchanged != public.players.length) {
+       return {error: "Showdown happened early"};
+     }
+     if (numWinners < 1) {
+       return {error: "No one won"};
+     }
+     // Theoretically it is possible that everyone has similar combinations.
+     // In that case everyone won and no one lost.
+     if (numLosers < 1 && numWinners != playerInfo.length) {
+       return {error: "No one lost"};
+     }
+     break;
+  }
   return {};
 }
 
+function checkUserInGame(uid, userGameInfo, game) {
+  if (!userGameInfo) {
+    return {error: "User not in the game" +
+        JSON.stringify(userGameInfo) +" vs " + uid + " vs " + gid} ;
+  }
+  var index = userGameInfo.myPosition;
+  if (game.private.players[index] != uid) {
+    return {error: "Inconsistent user information"}
+  }
+  return {}
+}
 
 async function loadGame(gid) {
   // First send two requests then await both
@@ -55,7 +138,6 @@ async function loadGame(gid) {
   }
 }
 
-
 // Exported functions below
 
 // Create empty game. It will wait for the players to join.
@@ -64,10 +146,10 @@ exports.createGame = functions.https.onCall((data, context) => {
   if (!context.auth || !context.auth.uid) {
     return {error: "Could not get user ID"};
   }
+  var uid = context.auth.uid;
   // Make the rest of the function async to be able to wait for database
   // data.
   return new Promise(async function(resolve, reject) {
-    var uid = context.auth.uid;
     var userInfoOrError = await getUserInfo(uid);
     if (userInfoOrError.error) {
       resolve(userInfo);
@@ -102,6 +184,22 @@ exports.createGame = functions.https.onCall((data, context) => {
   });
 });
 
+function deal(gid, game) {
+  var deck = poker.shuffleDeck();
+  var gameRef = admin.database().ref(shared.gamePrivatePath).child("cards").set({
+    deck: deck
+  });
+  // Fill in users' cards.
+  for (var i = 0 ; i < game.private.players.length; i++) {
+    var uid = game.private.players[i];
+    admin.database().ref(shared.playersGamePath(uid, gid)).child("hand").set(
+      deck.slice(i*poker.handSize, (i+1)*poker.handSize));
+  }
+
+  admin.database().ref(shared.gameInfoPath(gid)).child("status").set(
+    shared.GameState.WaitingForTurn);
+}
+
 // Create a new round of a game. It takes an ID of a finished game, and creates
 // a new game with same players but who is the dealer shifts to the next player.
 // Gets user ID in auth and ID of the previous game as previousGame argument.
@@ -117,7 +215,6 @@ exports.createGame = functions.https.onCall((data, context) => {
 //   // Make the rest of the function async to be able to wait for database
 //   // data.
 //   return new Promise(async function(resolve, reject) {
-//     var uid = context.auth.uid;
 //     var oldGame = await loadGame(previousGame);
 //     if (oldGame.error) {
 //       resolve(oldGame);
@@ -179,14 +276,15 @@ exports.joinGame = functions.https.onCall((data, context) => {
   if (!context.auth || !context.auth.uid) {
     return {error: "Could not get user ID"};
   }
+  var uid = context.auth.uid;
   var gid = data.gid;
   if (!gid) {
     return {error: "No game specified"}
   }
+
   // Make the rest of the function async to be able to wait for database
   // data.
   return new Promise(async function(resolve, reject) {
-    var uid = context.auth.uid;
     var userInfoOrError = await getUserInfo(uid);
     if (userInfoOrError.error) {
       resolve(userInfo);
@@ -242,6 +340,56 @@ exports.joinGame = functions.https.onCall((data, context) => {
       currentGame: gid
     });
 
+    resolve({});
+    return;
+  });
+});
+
+// Function for a dealer to start a game when everyone joined.
+// Takes user ID in auth and game ID in gid argument
+exports.startGame = functions.https.onCall((data, context) => {
+  if (!context.auth || !context.auth.uid) {
+    return {error: "Could not get user ID"};
+  }
+  var gid = data.gid;
+  if (!gid) {
+    return {error: "No game specified"}
+  }
+  var uid = context.auth.uid;
+  // Make the rest of the function async to be able to wait for database
+  // data.
+  return new Promise(async function(resolve, reject) {
+    var userInfoOrError = await getUserInfo(uid);
+    if (userInfoOrError.error) {
+      resolve(userInfo);
+      return;
+    }
+
+    var game = await loadGame(gid);
+    if (game.error) {
+      resolve(game);
+      return;
+    }
+
+    var userGameInfo = (await admin.database().ref(
+      shared.playersGamePath(uid, gid)).once('value')).val();
+    var checkUser = checkUserInGame(uid, userGameInfo, game);
+    if (checkUser.error){
+      resolve(checkUser);
+      return;
+    }
+
+    if (game.public.status != shared.GameState.WaitingForStart) {
+      resolve({error: "Game already started"});
+      return;
+    }
+
+    var index = userGameInfo.myPosition;
+    if (!game.public.players[index].isDealer) {
+      resolve({error: "Only dealer can start the game"});
+      return;
+    }
+    deal(gid, game);
     resolve({});
     return;
   });

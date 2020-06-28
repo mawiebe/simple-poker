@@ -25,10 +25,11 @@
 //    - waiting for people to decide about the next game.
 // /game-pub/$gid/players/$player_nr - information about the player.
 //                                     Keyed by number 0-player-count
-//   = {name, draw, draw_size, isDealer,
+//   = {name, draw, drawSize, isDealer,
 //      previousResult, [filled for showdown] hand, result}
-//   - presence of draw_size means that user finished their turn. We can
+//   - presence of drawSize means that user finished their turn. We can
 //     not rely on presense of draw_cc because empty array is stored as null.
+//   - draw is an array of indices of exchanged cards
 
 const GameState = Object.freeze({
   WaitingForStart: 0,   // For new games. Accepting players until dealer

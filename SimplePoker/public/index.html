@@ -201,8 +201,16 @@
       });
     }
     function testJoinGame() {
+      var game = document.getElementById("gid_input").value;
       var createGame = firebase.functions().httpsCallable('joinGame');
-      createGame({gid: "-MANs60e_WN49zjkEfmw"}).then(function(result) {
+      createGame({gid: game}).then(function(result) {
+        alert(JSON.stringify(result.data));
+      });
+    }
+    function testStartGame() {
+      var game = document.getElementById("gid_input").value;
+      var createGame = firebase.functions().httpsCallable('startGame');
+      createGame({gid: game}).then(function(result) {
         alert(JSON.stringify(result.data));
       });
     }
@@ -216,8 +224,10 @@
     <form>
       <input type="button" value="login" onclick="login();" />
       <input type="button" value="test new write user data" onclick="updateUserInfo();" />
-      <input type="button" value="test new create game" onclick="testCreateGame();" />
+      <input type="button" value="test new create game" onclick="testCreateGame();" /><br/>
+      <input id = "gid_input" type="text" value="-MANs60e_WN49zjkEfmw">
       <input type="button" value="test new join game" onclick="testJoinGame();" />
+      <input type="button" value="test new start game" onclick="testStartGame();" />
     </form>
     <form id="users"></form>
     <p />
