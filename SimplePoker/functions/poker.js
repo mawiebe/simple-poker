@@ -18,11 +18,13 @@ function shuffle(array) {
 
   return array;
 }
+var suitsToUse = 4;
+var ranksLength = 13;
+var deckSize = suitsToUse * ranksLength;
+
+exports.deckSize = deckSize;
 
 exports.shuffleDeck = function() {
-  var suitsToUse = 4;
-  var ranksLength = 13;
-  var deckSize = suitsToUse * ranksLength;
   var cards = [...Array(deckSize).keys()]
   // for (var i = 0; i < suitsToUse*ranks.length; i++) {
   //   cards.add[i];
@@ -30,4 +32,6 @@ exports.shuffleDeck = function() {
   shuffle(cards);
   return cards;
 }
+
+exports.shuffle = shuffle;
 exports.handSize = 5;

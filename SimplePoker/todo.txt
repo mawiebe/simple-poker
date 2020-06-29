@@ -1,0 +1,28 @@
+- Create function to end the game (if player is dealer)
+- Implement lock/transaction to avoid concurrency issues. Current possible 
+  scenario: a player sends 2 requests to exchange cards simultaneously and
+  that messes up cards.
+
+
+  function lockedExecute(gid, callback) {
+
+    return new Promise(async function (resolve, reject) {
+      var lockRef = firebase.database().ref(...);
+      var result = await lockRef.transaction(function(currentData) {
+        if (currentData === null || currentData === "" ) {
+          return "locked";
+        } else {
+          return; // Abort the transaction.
+        }
+      });
+      // ??????????????????????????????????????
+      if (!result.committed) {
+        reject({error: "concurrency"});
+        return;
+      }
+      var result = await callback();
+      lockRef.set("");
+      resolve(result);
+      return;
+    }
+  }

@@ -202,15 +202,22 @@
     }
     function testJoinGame() {
       var game = document.getElementById("gid_input").value;
-      var createGame = firebase.functions().httpsCallable('joinGame');
-      createGame({gid: game}).then(function(result) {
+      var joinGame = firebase.functions().httpsCallable('joinGame');
+      joinGame({gid: game}).then(function(result) {
         alert(JSON.stringify(result.data));
       });
     }
     function testStartGame() {
       var game = document.getElementById("gid_input").value;
-      var createGame = firebase.functions().httpsCallable('startGame');
-      createGame({gid: game}).then(function(result) {
+      var startGame = firebase.functions().httpsCallable('startGame');
+      startGame({gid: game}).then(function(result) {
+        alert(JSON.stringify(result.data));
+      });
+    }
+    function testExchangeCards() {
+      var game = document.getElementById("gid_input").value;
+      var exchangeCards = firebase.functions().httpsCallable('exchangeCards');
+      exchangeCards({gid: game, discarded:[0, 3,4]}).then(function(result) {
         alert(JSON.stringify(result.data));
       });
     }
@@ -225,9 +232,10 @@
       <input type="button" value="login" onclick="login();" />
       <input type="button" value="test new write user data" onclick="updateUserInfo();" />
       <input type="button" value="test new create game" onclick="testCreateGame();" /><br/>
-      <input id = "gid_input" type="text" value="-MANs60e_WN49zjkEfmw">
+      <input id = "gid_input" type="text" value="-MAxvpQ2xS426TOYzTS9">
       <input type="button" value="test new join game" onclick="testJoinGame();" />
       <input type="button" value="test new start game" onclick="testStartGame();" />
+      <input type="button" value="test new exchange" onclick="testExchangeCards();" />
     </form>
     <form id="users"></form>
     <p />
