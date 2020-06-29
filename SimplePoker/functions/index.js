@@ -29,10 +29,19 @@ function checkCorrectGame(public, private) {
   }
   var playersSeen = {};
   for (i in private.players) {
-    if (playersSeen[private.players[i]]) {
+    var privatePlayerInfo = private.players[i];
+    if (!privatePlayerInfo || !privatePlayerInfo.uid ) {
+      return {error: "Incorrect players list"};
+    }
+    if (public.status != shared.GameState.WaitingForStart &&
+        (!privatePlayerInfo.hand ||
+          privatePlayerInfo.hand.length != poker.handSize)) {
+      return {error: "Missing hand information"}
+    }
+    if (playersSeen[privatePlayerInfo.uid]) {
       return {error: "Player is in the game twice"};
     }
-    playersSeen[private.players[i]] = 1;
+    playersSeen[privatePlayerInfo.uid] = 1;
   }
   var numDealers = 0;
   var numExchanged = 0;
@@ -111,8 +120,24 @@ function checkUserInGame(uid, userGameInfo, game) {
         JSON.stringify(userGameInfo) +" vs " + uid + " vs " + gid} ;
   }
   var index = userGameInfo.myPosition;
-  if (game.private.players[index] != uid) {
+  if (game.private.players[index].uid != uid) {
     return {error: "Inconsistent user information"}
+  }
+  // Check that user did not try to cheat with cards.
+  if (!!game.private.players[index].hand !=
+      !! userGameInfo.hand) {
+    return {error: "Inconsistent hand information"};
+  }
+  if (userGameInfo.hand) {
+    var gameHand = game.private.players[index].hand;
+    if (userGameInfo.hand.length != gameHand.length) {
+      return {error: "Inconsistent hand information - length"};
+    }
+    for (i = 0; i < gameHand.length; i++) {
+      if (userGameInfo.hand[i] != gameHand[i]) {
+        return {error: "Inconsistent hand information - card"};
+      }
+    }
   }
   return {}
 }
@@ -159,7 +184,7 @@ exports.createGame = functions.https.onCall((data, context) => {
     var playerName = userInfoOrError.name;
 
     var gameRef = admin.database().ref(shared.gamePrivatePath).push({
-      players: [uid]
+      players: [{uid: uid}]
     });
     var gid = gameRef.key;
     admin.database().ref(shared.gameInfoPath(gid)).set({
@@ -186,14 +211,17 @@ exports.createGame = functions.https.onCall((data, context) => {
 
 function deal(gid, game) {
   var deck = poker.shuffleDeck();
-  var gameRef = admin.database().ref(shared.gamePrivatePath).child("cards").set({
-    deck: deck
-  });
+  var gameRef = admin.database().ref(shared.privateGamePath(gid))
+      .child("cards").set({deck: deck});
   // Fill in users' cards.
   for (var i = 0 ; i < game.private.players.length; i++) {
-    var uid = game.private.players[i];
+    var uid = game.private.players[i].uid;
+    var hand = deck.slice(i*poker.handSize, (i+1)*poker.handSize);
+    // Copy both to player's private info and game's private info.
+    admin.database().ref(shared.privateGamePath(gid))
+        .child("players").child(i).child("hand").set(hand);
     admin.database().ref(shared.playersGamePath(uid, gid)).child("hand").set(
-      deck.slice(i*poker.handSize, (i+1)*poker.handSize));
+        hand);
   }
 
   admin.database().ref(shared.gameInfoPath(gid)).child("status").set(
@@ -228,7 +256,7 @@ function deal(gid, game) {
 //     // TODO: check current user was in the game.
 //     var deck = poker.shuffleDeck();
 //     var gameRef = admin.database().ref(shared.gamePrivatePath).push({
-//       players: oldGame.private.players,
+//       NOPE WONT WORK NEED CLEAN HANDS players: oldGame.private.players,
 //       cards: {deck: deck}
 //     });
 //     var gid = gameRef.key;
@@ -253,7 +281,7 @@ function deal(gid, game) {
 //
 //     // Fill in private part of the game
 //     for (var i in oldGame.private.players) {
-//       var uid = oldGame.private.players[i];
+//       var uid = oldGame.private.players[i].uid;
 //       admin.database().ref(shared.playersGamePath(uid, gid)).set({
 //         myPosition: i,
 //         // Theoretically we should pick every 5h card but if cards are
@@ -302,14 +330,8 @@ exports.joinGame = functions.https.onCall((data, context) => {
       return;
     }
 
-    var uids = game.private.players;
-    if (!uids) {
-      resolve({error: "Game without players"});
-      return;
-    }
-
-    for (i in uids) {
-      if (uids[i] == uid) {
+    for (i in game.private.players) {
+      if (game.private.players[i].uid == uid) {
         // Todo: switch current game
         resolve({error: "You already joined."});
         return;
@@ -317,14 +339,14 @@ exports.joinGame = functions.https.onCall((data, context) => {
     }
 
     // Add a player uid to private game info
-    var index = uids.length;
+    var index = game.private.players.length;
     if (!index || !Number.isInteger(index) || index < 1) {
       resolve({error : "Wrong players number: " + JSON.stringify(index)});
       return;
     }
 
     admin.database().ref(shared.privateGamePath(gid)).child("players").update({
-        [index]: uid
+        [index]: {uid: uid}
     });
 
     admin.database().ref(shared.gameInfoPath(gid)).child("players").update({

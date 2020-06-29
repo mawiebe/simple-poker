@@ -13,7 +13,7 @@
 // /game-admin/$gid - private information about the game. Only visible to admin.
 //                    gid is generated here as the key.
 // /game-admin/$gid/cards = {deck, discard_shuffle} - cards
-// /game-admin/$gid/players/$player_nr = uid
+// /game-admin/$gid/players/$player_nr = {uid, hand}
 //
 // /game-pub/$gid/ - public info about game. Read-only for everyone, writeable
 //                   by admin. Gid is taken by the game above
