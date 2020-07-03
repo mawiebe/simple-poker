@@ -25,15 +25,63 @@ var globalOnChange = function () {}
 
 var globalPlayerInfo = {}
 
-function updateUserInfo(uid, email, name) {
+function updateUserInfo(uid, name, email) {
+  if (!email && globalPlayerInfo.user) {
+    email = globalPlayerInfo.user.email;
+  }
   firebase.database().ref(userInfoPath(uid)).update({
-    email: email,
-    name: name
+    name: name,
+    email: email
   });
 }
 
-function exchangeCards(cards) {
-  // TODO: call server
+function createGame(callback) {
+  var createGame = firebase.functions().httpsCallable('createGame');
+  createGame().then(function(result) {
+    callback(result.data);
+  });
+}
+
+function joinGame(gid) {
+  var joinGame = firebase.functions().httpsCallable('joinGame');
+  joinGame({gid: game}).then(function(result) {
+    callback(result.data);
+  });
+}
+function deal() {
+  var game = globalPlayerInfo.currentGame;
+  if (!game || !globalPlayerInfo.currentGameId) {
+    callback({error: "No game to start"});
+    return;
+  }
+  if (game.state != GameState.WaitingForStart) {
+    callback({error: "Game already started"});
+    return;
+  }
+  if(!game.players[game.myPosition].isDealer) {
+    callback({error: "Only the dealer can start the game"});
+    return;
+  }
+  var startGame = firebase.functions().httpsCallable('startGame');
+  startGame({gid: globalPlayerInfo.currentGameId}).then(function(result) {
+    callback(result.data);
+  });
+}
+
+function exchangeCards(discarded, callback) {
+  var game = globalPlayerInfo.currentGame;
+  if (!game || !globalPlayerInfo.currentGameId ||
+     !game.players[game.myPosition].theirTurn) {
+    callback({error: "Not your turn"});
+    return;
+  }
+  var exchangeCards = firebase.functions().httpsCallable('exchangeCards');
+  exchangeCards({
+    gid: globalPlayerInfo.currentGameId,
+    discarded:discarded
+  }).then(function(result) {
+    callback(result.data);
+  });
 }
 
 // Below are 3 trackers that are invoked either when information is loaded from
@@ -58,24 +106,26 @@ function currentPlayersGamePath() {
 var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
   var user = globalPlayerInfo.user;
 
-  if (!user || user.uid != snapshot.key()) {
+  if (!user || user.uid != snapshot.ref.parent.key) {
     console.error("Unexpected user info callback. Current user: " +
       JSON.stringify(user) +
-      "Snapshot key: " + snapshot.key() +
+      "Snapshot key: " + snapshot.ref.parent.key +
       "Snapshot val: " + JSON.stringify(snapshot.val()));
     return;
   }
   if (snapshot.val() == null) {
     // This will call the function again as it updates the part of DB it is
     // tied to.
-    updateUserInfo(snapshot.key(), user.email,user.defaultName);
+    updateUserInfo(snapshot.key, user.email,user.defaultName);
   } else {
     user.email = snapshot.val().email;
     user.name = snapshot.val().name;
     globalPlayerInfo.currentGameId = snapshot.val().currentGame;
     globalPlayerInfo.currentGame = {}
     globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
-    if (!gameInfoTracker.updatePath() && !playersGameTracker.updatePath()) {
+    // Avoiding short-circuit evaluation
+    var gameUpdated = gameInfoTracker.updatePath();
+    if (!playersGameTracker.updatePath() && !gameUpdated) {
       // Invoke callback even if game stayed the same - if this function was
       // called, somthing indeed changed.
       globalOnChange(globalPlayerInfo);
@@ -86,31 +136,58 @@ var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
 
 var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
   // check state validity
-  if (globalPlayerInfo.currentGameId != snapshot.key() ||
+  if (globalPlayerInfo.currentGameId != snapshot.key ||
     !globalPlayerInfo.currentGame) {
     console.error("Unexpected game info callback. CurrentGameId: " +
       globalPlayerInfo.currentGameId +
       "Current Game: " + JSON.stringify(globalPlayerInfo.currentGame) +
-      "Snapshot key: " + snapshot.key() +
+      "Snapshot key: " + snapshot.key +
       "Snapshot val: " + JSON.stringify(snapshot.val()));
     return;
   }
   // Load public info about the game to the global object
   if (snapshot.val()) {
+    if (snapshot.val().players.length < 1) {
+      console.error("Game without players");
+    }
     globalPlayerInfo.currentGame.status = snapshot.val().status;
     globalPlayerInfo.currentGame.players = snapshot.val().players;
+    var last =  globalPlayerInfo.currentGame.players[
+      globalPlayerInfo.currentGame.players.length -1];
+
+    // Fill in extra data that is not stored in DB.
+
+    // Presense of draw_size says that player did their move. It's player's
+    // turn if they did not make a move yet and previous player either did
+    // their move or is a dealer.
+    var prevDoneOrDealer = (last.isDealer || last.drawSize != null);
+    for (var i in globalPlayerInfo.currentGame.players) {
+      var player = globalPlayerInfo.currentGame.players[i];
+      if (player.drawSize == 0) {
+        // Database does not save empty array=> have to restore them manually.
+        player.draw = [];
+      }
+      // TODO: fill in hand for showdown
+      if (globalPlayerInfo.currentGame.status == GameState.WaitingForTurn &&
+          prevDoneOrDealer && player.drawSize == null) {
+        player.theirTurn = true;
+      }
+      prevDoneOrDealer = (player.isDealer || player.drawSize != null);
+    }
+
   }
+  globalOnChange(globalPlayerInfo);
 
 });
 var playersGameTracker = new DbTracker(currentPlayersGamePath,
                                        function (snapshot) {
   // check state validity
-  if (globalPlayerInfo.currentGameId != snapshot.key() ||
+  if (globalPlayerInfo.currentGameId != snapshot.key ||
     !globalPlayerInfo.currentGame) {
     console.error("Unexpected player's game callback. CurrentGameId: " +
       globalPlayerInfo.currentGameId +
       "Current Game: " + JSON.stringify(globalPlayerInfo.currentGame) +
-      "Snapshot key: " + snapshot.key() +
+      "Snapshot key: " + snapshot.key +
       "Snapshot val: " + JSON.stringify(snapshot.val()));
     return;
   }
@@ -122,8 +199,8 @@ var playersGameTracker = new DbTracker(currentPlayersGamePath,
       globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[x]));
     }
   }
+  globalOnChange(globalPlayerInfo);
 });
-
 
 function User(uid, email, defaultName) {
   this.uid = uid;
@@ -145,34 +222,32 @@ function onUserChange(uid, email, defaultName) {
   // if updatePath returns true, no need for refresh - it will happen on
   // result from DB.
   if (!userInfoTracker.updatePath()) {
-    globalOnChange(globalPlayerInfo());
+    globalOnChange(globalPlayerInfo);
   }
 }
 
 function initWorld(onChange) {
-  document.addEventListener('DOMContentLoaded', function () {
-    // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-    // // The Firebase SDK is initialized and available here!
-    //
-    firebase.auth().onAuthStateChanged(user => {
-      onUserChange(user.uid, user.email, user.displayName);
-    });
-    // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-    // firebase.messaging().requestPermission().then(() => { });
-    // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-    //
-    // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-
-    try {
-      let app = firebase.app();
-      globalOnChange(globalPlayerInfo);
-    } catch (e) {
-      console.error(e);
-      globalPlayerInfo.systemOk = false;
-      globalPlayerInfo.systemLoadError =
-        'Error loading the Firebase SDK, check the console.';
-      globalOnChange(globalPlayerInfo);
-    }
+  globalOnChange = onChange;
+  // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+  // // The Firebase SDK is initialized and available here!
+  //
+  firebase.auth().onAuthStateChanged(user => {
+    onUserChange(user.uid, user.email, user.displayName);
   });
+  // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
+  // firebase.messaging().requestPermission().then(() => { });
+  // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
+  //
+  // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
 
+  try {
+    let app = firebase.app();
+    globalOnChange(globalPlayerInfo);
+  } catch (e) {
+    console.error(e);
+    globalPlayerInfo.systemOk = false;
+    globalPlayerInfo.systemLoadError =
+      'Error loading the Firebase SDK, check the console.';
+    globalOnChange(globalPlayerInfo);
+  }
 }

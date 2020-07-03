@@ -26,7 +26,7 @@
 // /game-pub/$gid/players/$player_nr - information about the player.
 //                                     Keyed by number 0-player-count
 //   = {name, draw, drawSize, isDealer,
-//      previousResult, [filled for showdown] hand, result}
+//      previousResult, [filled for showdown] hand, combination, result}
 //   - presence of drawSize means that user finished their turn. We can
 //     not rely on presense of draw_cc because empty array is stored as null.
 //   - draw is an array of indices of exchanged cards

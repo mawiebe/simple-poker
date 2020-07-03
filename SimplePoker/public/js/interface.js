@@ -35,6 +35,7 @@ playerInfo = {  // World state for a player
   user :  {  // null if not logged in
     uid: "1234",
     name: "Zhenya",
+    email: "etsurinov@gmail.com"
 
     setName: function(name) {}
   },
@@ -43,13 +44,13 @@ playerInfo = {  // World state for a player
   // In later versions we can support several games simultaniously.
   currentGameId: "4321",
   currentGame: {
-    state: GameState.WaitingForExchange,
+    state: GameState.WaitingForTurn,
     players: [
       {
         name: Zhenya,
-        dealer: true,
+        isDealer: true,
         theirTurn: true,
-        previousWinner: true,
+        previousResult: PlayerResult.Win,
         // During showdown this will also contain:
         //
         // hand: [{rank: 1, suit:2}, ... ]
@@ -59,7 +60,7 @@ playerInfo = {  // World state for a player
       {
         name: Evgeny,
         draw: [1, 3, 4],  // indices of cards that the player exchanged
-        previousLoser: true,
+        previousResult: PlayerResult.Lose,
       }
     ],
     myPosition: 1,

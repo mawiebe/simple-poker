@@ -1,5 +1,7 @@
 - Create function to end the game (if player is dealer)
-- Implement lock/transaction to avoid concurrency issues. Current possible 
+- Render showdown
+- Test empty draw
+- Implement lock/transaction to avoid concurrency issues. Current possible
   scenario: a player sends 2 requests to exchange cards simultaneously and
   that messes up cards.
 

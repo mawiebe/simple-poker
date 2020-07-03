@@ -3,5 +3,4 @@ let J=I+1;
 
 sed -i "s/cbust=$I/cbust=$J/g" public/index.html
 
-firebase deploy
-
+firebase deploy --only hosting

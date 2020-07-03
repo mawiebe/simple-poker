@@ -55,7 +55,8 @@ function checkCorrectGame(public, private) {
   }
   var numDealers = 0;
   var numExchanged = 0;
-  var previousExchanged = !!public.players[public.players.length - 1].drawSize;
+  var previousExchanged =
+      public.players[public.players.length - 1].drawSize != null;
   var previousDealer = !!public.players[public.players.length - 1].isDealer;
 
   var numWinners = 0;
@@ -70,7 +71,7 @@ function checkCorrectGame(public, private) {
     if (playerInfo.isDealer) {
       numDealers++;
     }
-    var exchanged = !!playerInfo.drawSize;
+    var exchanged = playerInfo.drawSize != null;
     if (exchanged) {
       numExchanged++;
     }

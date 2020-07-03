@@ -16,15 +16,16 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="/js/shared.js?cbust=11"></script>
-  <script defer src="/js/database.js?cbust=11"></script>
-  <script defer src="/js/poker.js?cbust=11"></script>
+  <script defer src="./js/shared.js?cbust=23"></script>
+  <script defer src="./js/poker.js?cbust=23"></script>
+  <script defer src="./js/database-new.js?cbust=23"></script>
 
   <script>
+
     function outputHand(hand, combo) {
       var str = "";
       for (var i in hand) {
-        str += getCard(hand[i]).text + " ";
+        str += hand[i].text + " ";
       }
       if (combo) {
         str += combo.combinationName;
@@ -32,15 +33,14 @@
       return str;
     }
 
-    function playerText(game, player, playersTurn) {
-      var draw = game.draws ? game.draws[player.id] : null;
-      if (playersTurn) {
+    function playerText(player) {
+      if (player.theirTurn) {
         return "Player " + player.name + " is doing their turn";
       }
-      if (!draw) {
+      if (player.drawSize == null) {
         return "Player " + player.name + " is waiting for their turn";
       }
-      return "Player " + player.name + " exchanged " + draw.length + " cards";
+      return "Player " + player.name + " exchanged " + player.drawSize + " cards";
     }
 
     function exchange() {
@@ -54,188 +54,124 @@
       exchangeCards(cards);
     }
 
-    function renderGameInFlight(game, userId) {
+    function renderGameInFlight(game) {
       var contents = "";
-      var previousExchanged = true;
-      var yourTurn = false;
-      var yourHand = getHand(game, userId);
+      // var yourTurn = false;
+      // var yourHand = getHand(game, userId);
       for (i in game.players) {
         var player = game.players[i];
-        var playerExchanged = game.draws && game.draws[player.id];
-        var playersTurn = previousExchanged && !playerExchanged;
-        if (player.id == userId) {
-          contents += "<b>Your hand:</b> " + outputHand(yourHand);
-          if (playersTurn) {
-            yourTurn = true;
+        if (i == game.myPosition) {
+          contents += "<b>Your hand:</b> " + outputHand(game.myHand);
+          if (player.theirTurn) {
             contents += "<span style='color:green'> Your turn</span>";
           }
         } else {
-          contents += playerText(game, player, playersTurn);
+          contents += playerText(player);
         }
         contents += "<br/>";
-        previousExchanged = playerExchanged;
       }
-      if (yourTurn) {
+      if (game.players[game.myPosition].theirTurn) {
         contents += "<p/>Select cards to exchange:<br/>"
         contents += "<form>";
-        for (var i in yourHand) {
+        for (var i in game.myHand) {
           contents += "<input type='checkbox' id='xch" + i + "' name='xch" + i + "'/>";
-          contents += "<label for='xch" + i + "'>" + getCard(yourHand[i]).text;
+          contents += "<label for='xch" + i + "'>" + getCard(game.myHand[i]).text;
           contents += "</label>";
         }
         contents +=
-          "<input type='button' value='exchange' onclick='exchange();'/>" +
+          "<input type='button' value='exchange' onclick='exchangeCardsUI();'/>" +
           "</form>";
       }
       return contents
     }
 
-    function renderGameResults(results, userId) {
-      var str = "";
-      for (i in results) {
-        var playerInfo = results[i];
-        if (playerInfo.id == userId) {
-          str += "<b>Your hand:</b> "
-        } else {
-          str += "Player " + playerInfo.name + ":"
-        }
-        str += outputHand(playerInfo.hand, playerInfo.combo);
-        if (playerInfo.wins) {
-          str += " wins";
-        }
-        if (playerInfo.loses) {
-          str += " loses";
-        }
-        str += "<br/>"
-      }
-      return str;
-    }
+    // function renderGameResults(results, userId) {
+    //   var str = "";
+    //   for (i in results) {
+    //     var playerInfo = results[i];
+    //     if (playerInfo.id == userId) {
+    //       str += "<b>Your hand:</b> "
+    //     } else {
+    //       str += "Player " + playerInfo.name + ":"
+    //     }
+    //     str += outputHand(playerInfo.hand, playerInfo.combo);
+    //     if (playerInfo.wins) {
+    //       str += " wins";
+    //     }
+    //     if (playerInfo.loses) {
+    //       str += " loses";
+    //     }
+    //     str += "<br/>"
+    //   }
+    //   return str;
+    // }
 
-    function getGameText(game) {
-      if (!game) {
+
+    function renderGame(game) {
+      if (!game || game.myPosition == null || !game.players) {
         return "No active games";
       }
-      var userId = globalUser.uid;
-      var results = getResults(game);
-      if (results) {
-        return renderGameResults(results, userId);
-      }
-      return renderGameInFlight(game, userId);
+      // var userId = globalUser.uid;
+      // var results = getResults(game);
+      // if (results) {
+      //   return renderGameResults(results, userId);
+      // }
+      return renderGameInFlight(game);
     }
 
-    function renderGame() {
-      if (!currentUserId) {
+    function renderPlayerInfo(playerInfo) {
+      if (!playerInfo || !playerInfo.user || !playerInfo.user.uid) {
         document.getElementById('game').innerHTML = "Please login";
       } else {
-        document.getElementById('game').innerHTML = getGameText(currentGame);
+        document.getElementById('name_input').value = playerInfo.user.name;
+        document.getElementById('game').innerHTML = renderGame(
+          playerInfo.currentGame);
       }
     }
 
-    function startTheGame() {
-      if (selectedUsers.size <= 1) {
-        console.error("Not enough players");
-        return;
-      }
-      var players = [];
-      for (user in selectedUsers) {
-        players.push({
-          id: user,
-          name: allUsers[user].name
-        });
-      }
-      startGame(players);
+    function resultCallback(result) {
+      alert(JSON.stringify(result));
     }
 
-    var selectedUsers = {};
+    function updateUserInfoUI() {
+      var newName = document.getElementById("name_input").value;
+      if (globalPlayerInfo.user.uid && newName && newName != "") {
+        updateUserInfo(globalPlayerInfo.user.uid, newName)
+      }
+    }
+    function joinGameUI() {
+      var gid = document.getElementById("gid_input").value;
+      if (gid && gid != "") {
+        joinGame(gid, resultCallback);
+      }
+    }
+    function startGameUI() {
+      startGame(gid, resultCallback);
+    }
 
-    function updateSelection() {
-      var selection = {};
-      var count = 0;
-      for (user in allUsers) {
-        var checkbox = document.getElementById("u" + user);
-        if (checkbox && checkbox.checked) {
-          selection[user] = 1;
-          count++;
+    function exchangeCardsUI() {
+      var cards = [];
+      for (var i = 0; i < 5; i++) {
+        var checkbox = document.getElementById('xch' + i);
+        if (checkbox.checked) {
+          cards.push(i);
         }
       }
-      selectedUsers = selection;
-      document.getElementById("start").disabled = (count > 1 ? null : "disabled");
-    }
-
-    function renderUsers() {
-      if (allUsers == null) {
-        return;
-      }
-      if (globalUser != null && allUsers[globalUser.uid]) {
-        document.getElementById('user').innerHTML =
-          "User: " + allUsers[globalUser.uid].name;
-      }
-      var contents = "";
-      for (user in allUsers) {
-        contents += "<input type='checkbox' id='u" + user + "' name='u" + user + "' ";
-        if (selectedUsers[user]) {
-          contents += "checked ";
-        }
-        contents += "onclick='updateSelection()'/>";
-
-        contents += "<label for='u" + user + "'>" + allUsers[user].name + ", ";
-        contents += allUsers[user].email;
-        contents += "</label><br/>";
-      }
-      contents += '<input type="button" id="start" value="Start game" disabled onclick="startTheGame();" />';
-
-      document.getElementById("users").innerHTML = contents;
-    }
-    function updateUserInfo() {
-      if (globalUser) {
-        firebase.database().ref(userInfoPath(globalUser.uid)).update({
-          email: globalUser.email,
-          name: globalUser.displayName,
-        });
-      }
-    }
-    function testCreateGame() {
-      var createGame = firebase.functions().httpsCallable('createGame');
-      createGame().then(function(result) {
-        alert(JSON.stringify(result.data));
-      });
-    }
-    function testJoinGame() {
-      var game = document.getElementById("gid_input").value;
-      var joinGame = firebase.functions().httpsCallable('joinGame');
-      joinGame({gid: game}).then(function(result) {
-        alert(JSON.stringify(result.data));
-      });
-    }
-    function testStartGame() {
-      var game = document.getElementById("gid_input").value;
-      var startGame = firebase.functions().httpsCallable('startGame');
-      startGame({gid: game}).then(function(result) {
-        alert(JSON.stringify(result.data));
-      });
-    }
-    function testExchangeCards() {
-      var game = document.getElementById("gid_input").value;
-      var exchangeCards = firebase.functions().httpsCallable('exchangeCards');
-      exchangeCards({gid: game, discarded:[0, 3,4]}).then(function(result) {
-        alert(JSON.stringify(result.data));
-      });
+      exchangeCards(cards, resultCallback);
     }
   </script>
 </head>
 
 <body>
-  <p id="load">Firebase SDK Loading&hellip;</p>
-  <div id="user">User: not logged in</div>
-  <div id="buttons" style="display:none">
+  <div id="buttons">
     <form>
       <input type="button" value="login" onclick="login();" />
-      <input type="button" value="test new write user data" onclick="updateUserInfo();" />
-      <input type="button" value="test new create game" onclick="testCreateGame();" /><br/>
+      Your name: <input id = "name_input" type="text" >
+      <input type="button" value="Update name" onclick="updateUserInfoUI();" />
+      <input type="button" value="Create new game" onclick="createGame();" /><br/>
       <input id = "gid_input" type="text" value="-MAxvpQ2xS426TOYzTS9">
-      <input type="button" value="test new join game" onclick="testJoinGame();" />
-      <input type="button" value="test new start game" onclick="testStartGame();" />
-      <input type="button" value="test new exchange" onclick="testExchangeCards();" />
+      <input type="button" value="Join game" onclick="joinGameUI();" />
+      <input type="button" value="Start game" onclick="startGameUI();" />
     </form>
     <form id="users"></form>
     <p />
@@ -246,33 +182,7 @@
     <p />
     <script>
       document.addEventListener('DOMContentLoaded', function() {
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        firebase.auth().onAuthStateChanged(user => {
-          globalUser = user;
-          if (checkUser()) {
-            renderUsers();
-          } else {
-            document.getElementById('user').innerHTML = "User: " + user.email;
-          }
-          changeUser(user.uid);
-        });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-
-        try {
-          let app = firebase.app();
-          document.getElementById('load').remove();
-          document.getElementById('buttons').style.display = 'block';
-          listUsers();
-        } catch (e) {
-          console.error(e);
-          document.getElementById('load').innerHTML = 'Error loading the Firebase SDK, check the console.';
-        }
+        initWorld(renderPlayerInfo);
       });
     </script>
 </body>
