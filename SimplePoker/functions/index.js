@@ -32,7 +32,7 @@ function checkCorrectGame(public, private) {
     }
   }
   var playersSeen = {};
-  for (i in private.players) {
+  for (var i in private.players) {
     var privatePlayerInfo = private.players[i];
     if (!privatePlayerInfo || !privatePlayerInfo.uid) {
       return {
@@ -61,7 +61,7 @@ function checkCorrectGame(public, private) {
 
   var numWinners = 0;
   var numLosers = 0;
-  for (i in public.players) {
+  for (var i in public.players) {
     var playerInfo = public.players[i];
     if (!playerInfo) {
       return {
@@ -387,7 +387,7 @@ exports.joinGame = functions.https.onCall((data, context) => {
       return;
     }
 
-    for (i in game.private.players) {
+    for (var i in game.private.players) {
       if (game.private.players[i].uid == uid) {
         // Todo: switch current game
         resolve({
@@ -499,7 +499,7 @@ exports.startGame = functions.https.onCall((data, context) => {
 // cards - Map {<card_to_exchange_index>-> 1}
 // drawSize - number of cards to exchange
 // game - {private, public} -snapshots of database from loadGame()
-async function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
+function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
   // No cards to exchange, just record the turn.
   if (drawSize == 0) {
     admin.database().ref(shared.gameInfoPath(gid)).child("players")
@@ -567,6 +567,65 @@ async function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
   return {}
 }
 
+function updateWinnerLoserInfo(info, idx, combo, isWinner) {
+  if (!info.combo) {
+    info.combo = combo;
+    info.indices = {[idx]:1};
+    return;
+  }
+  var cmp = poker.compareCombos(info.combo, combo);
+  // After inverting the comparison result if we are counting winners,
+  // the rest of the code can works as if we are counting losers.
+  if (isWinner) {
+    cmp = -cmp;
+  }
+
+  if (cmp == 0) {
+    // Add this player to the winers/losers list.
+    info.indices[idx] = 1;
+  } else if (cmp > 0) {
+    // Replase the winning/losing combination and players
+    info.combo = combo;
+    info.indices = {[idx]:1};
+  }
+}
+
+function finishGame(game, gid) {
+  var combos = {};
+
+  // counters containing combo=/*object returned by getCombo*/ and
+  // indices = {i->1} for all indicies that won or lost.
+  var loserInfo = {}, winnerInfo = {};
+
+  for (var i in game.private.players) {
+    var hand = game.private.players[i].hand;
+    var combo = poker.getCombo(hand);
+    combos[i] = combo;
+    updateWinnerLoserInfo(loserInfo, i, combo, false);
+    updateWinnerLoserInfo(winnerInfo, i, combo, true);
+  }
+  for (var i in game.private.players) {
+    var result;
+    if (winnerInfo.indices[i]) {
+      result = shared.PlayerResult.Win;
+    } else if (loserInfo.indices[i]) {
+      result = shared.PlayerResult.Lose;
+    } else {
+      result = shared.PlayerResult.Middle;
+    }
+    // Update public game information with player's draw. Has to be the last to
+    // avoid other players making move too early
+    admin.database().ref(shared.gameInfoPath(gid)).child("players")
+      .child(i).update({
+        result: result,
+        hand: game.private.players[i].hand,
+        combination: combos[i]
+      });
+  }
+  admin.database().ref(shared.gameInfoPath(gid)).child("status").set(
+    shared.GameState.Showdown);
+}
+
 // A function for a user to exchange cards. Checks that it's user's turn and
 // that the user is in the game.
 // Takes user ID in auth, game ID in gid argument and discarded cards in
@@ -588,6 +647,7 @@ exports.exchangeCards = functions.https.onCall((data, context) => {
   var gid = data.gid;
   var cards = {};
   var drawSize = 0;
+  // Sanitize input amnd convert it from array to map {index->1}
   if (data.discarded) {
     for (var idx in data.discarded) {
       var i = data.discarded[idx];
@@ -643,7 +703,16 @@ exports.exchangeCards = functions.https.onCall((data, context) => {
       return;
     }
 
-    resolve(exchangeCardsImpl(uid, gid, index, cards, drawSize, game));
+    var result = exchangeCardsImpl(uid, gid, index, cards, drawSize, game);
+    if (result.error) {
+      resolve (result);
+      return;
+    }
+    // Dealer made the turn - game done.
+    if (game.public.players[index].isDealer) {
+      finishGame(game, gid);
+    }
+    resolve (result);
     return;
   });
 

@@ -16,9 +16,9 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="./js/shared.js?cbust=23"></script>
-  <script defer src="./js/poker.js?cbust=23"></script>
-  <script defer src="./js/database-new.js?cbust=23"></script>
+  <script defer src="./js/shared.js?cbust=27"></script>
+  <script defer src="./js/poker.js?cbust=27"></script>
+  <script defer src="./js/database-new.js?cbust=27"></script>
 
   <script>
 
@@ -75,7 +75,7 @@
         contents += "<form>";
         for (var i in game.myHand) {
           contents += "<input type='checkbox' id='xch" + i + "' name='xch" + i + "'/>";
-          contents += "<label for='xch" + i + "'>" + getCard(game.myHand[i]).text;
+          contents += "<label for='xch" + i + "'>" + game.myHand[i].text;
           contents += "</label>";
         }
         contents +=
@@ -85,38 +85,42 @@
       return contents
     }
 
-    // function renderGameResults(results, userId) {
-    //   var str = "";
-    //   for (i in results) {
-    //     var playerInfo = results[i];
-    //     if (playerInfo.id == userId) {
-    //       str += "<b>Your hand:</b> "
-    //     } else {
-    //       str += "Player " + playerInfo.name + ":"
-    //     }
-    //     str += outputHand(playerInfo.hand, playerInfo.combo);
-    //     if (playerInfo.wins) {
-    //       str += " wins";
-    //     }
-    //     if (playerInfo.loses) {
-    //       str += " loses";
-    //     }
-    //     str += "<br/>"
-    //   }
-    //   return str;
-    // }
+    function renderShowdown(game) {
+      var str = "";
+      for (i in game.players) {
+        var playerInfo = game.players[i];
+        if (i == game.myPosition) {
+          str += "<b>Your hand:</b> "
+        } else {
+          str += "Player " + playerInfo.name + ":"
+        }
+        str += outputHand(playerInfo.hand, playerInfo.combination);
+        if (playerInfo.result == PlayerResult.Win) {
+          str += " wins";
+        } else if (playerInfo.result == PlayerResult.Lose) {
+          str += " loses";
+        }
+        str += "<br/>"
+      }
+      return str;
+    }
 
 
-    function renderGame(game) {
+    function renderGame(game, gid) {
       if (!game || game.myPosition == null || !game.players) {
         return "No active games";
       }
-      // var userId = globalUser.uid;
-      // var results = getResults(game);
-      // if (results) {
-      //   return renderGameResults(results, userId);
-      // }
-      return renderGameInFlight(game);
+
+      switch (game.status) {
+        case GameState.WaitingForStart:
+          return "Waiting for other players to join. Game ID: " + gid;
+        case GameState.WaitingForTurn:
+          return renderGameInFlight(game);
+        case GameState.Showdown:
+            return renderShowdown(game);
+
+      }
+      return "Malformed game";
     }
 
     function renderPlayerInfo(playerInfo) {
@@ -125,7 +129,7 @@
       } else {
         document.getElementById('name_input').value = playerInfo.user.name;
         document.getElementById('game').innerHTML = renderGame(
-          playerInfo.currentGame);
+          playerInfo.currentGame, playerInfo.currentGameId);
       }
     }
 
@@ -145,8 +149,8 @@
         joinGame(gid, resultCallback);
       }
     }
-    function startGameUI() {
-      startGame(gid, resultCallback);
+    function dealUI() {
+      deal(resultCallback);
     }
 
     function exchangeCardsUI() {
@@ -171,7 +175,7 @@
       <input type="button" value="Create new game" onclick="createGame();" /><br/>
       <input id = "gid_input" type="text" value="-MAxvpQ2xS426TOYzTS9">
       <input type="button" value="Join game" onclick="joinGameUI();" />
-      <input type="button" value="Start game" onclick="startGameUI();" />
+      <input type="button" value="Deal" onclick="dealUI();" />
     </form>
     <form id="users"></form>
     <p />

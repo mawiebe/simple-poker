@@ -44,7 +44,7 @@ playerInfo = {  // World state for a player
   // In later versions we can support several games simultaniously.
   currentGameId: "4321",
   currentGame: {
-    state: GameState.WaitingForTurn,
+    status: GameState.WaitingForTurn,
     players: [
       {
         name: Zhenya,

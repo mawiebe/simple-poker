@@ -1,5 +1,21 @@
 // see shared.js for the schema
 
+function login() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(function (error) {
+    // Handle Errors here.
+    globalUser = null;
+    var errorSummary = {
+      errorCode: error.code,
+      errorMessage: error.message,
+      email: error.email,
+      credential: error.credential,
+    };
+
+    alert("Auth error: " + JSON.stringify(errorSummary));
+  });
+}
+
 // Tool that helps to track a part of a database and switch to another part
 // when needed.
 function DbTracker(pathGetter, callback) {
@@ -44,17 +60,17 @@ function createGame(callback) {
 
 function joinGame(gid) {
   var joinGame = firebase.functions().httpsCallable('joinGame');
-  joinGame({gid: game}).then(function(result) {
+  joinGame({gid: gid}).then(function(result) {
     callback(result.data);
   });
 }
-function deal() {
+function deal(callback) {
   var game = globalPlayerInfo.currentGame;
   if (!game || !globalPlayerInfo.currentGameId) {
     callback({error: "No game to start"});
     return;
   }
-  if (game.state != GameState.WaitingForStart) {
+  if (game.status != GameState.WaitingForStart) {
     callback({error: "Game already started"});
     return;
   }
@@ -167,10 +183,18 @@ var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
         // Database does not save empty array=> have to restore them manually.
         player.draw = [];
       }
-      // TODO: fill in hand for showdown
+
       if (globalPlayerInfo.currentGame.status == GameState.WaitingForTurn &&
           prevDoneOrDealer && player.drawSize == null) {
         player.theirTurn = true;
+      }
+      // translate hand from numeric codes to card descriptions.
+      if (player.hand) {
+        var handCards = [];
+        for (var i in player.hand) {
+          handCards.push(getCard(player.hand[i]));
+        }
+        player.hand = handCards;
       }
       prevDoneOrDealer = (player.isDealer || player.drawSize != null);
     }
@@ -195,8 +219,8 @@ var playersGameTracker = new DbTracker(currentPlayersGamePath,
   if (snapshot.val()) {
     globalPlayerInfo.currentGame.myPosition = snapshot.val().myPosition;
     globalPlayerInfo.currentGame.myHand = []
-    for (x in snapshot.val().hand) {
-      globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[x]));
+    for (var i in snapshot.val().hand) {
+      globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[i]));
     }
   }
   globalOnChange(globalPlayerInfo);

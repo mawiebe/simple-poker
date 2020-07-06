@@ -1,5 +1,7 @@
-- Create function to end the game (if player is dealer)
-- Render showdown
+- Game does not render after re-login or name change
+- Implement next round
+- Do not alert success.
+- Disable irrelevant buttons
 - Test empty draw
 - Implement lock/transaction to avoid concurrency issues. Current possible
   scenario: a player sends 2 requests to exchange cards simultaneously and
@@ -28,3 +30,7 @@
       return;
     }
   }
+
+Done:
+- Create function to end the game (if player is dealer)
+- Render showdown
