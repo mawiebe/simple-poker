@@ -687,7 +687,7 @@ exports.exchangeCards = functions.https.onCall((data, context) => {
     }
 
     var index = userGameInfo.myPosition;
-    if (game.public.players[index].draw) {
+    if (game.public.players[index].drawSize != null) {
       resolve({
         error: "You already exchanged cards"
       });
@@ -695,7 +695,7 @@ exports.exchangeCards = functions.https.onCall((data, context) => {
     }
     var prev =
       (index == 0 ? game.public.players.length - 1 : index -1);
-    if (!game.public.players[prev].draw &&
+    if (game.public.players[prev].drawSize == null &&
       !game.public.players[prev].isDealer) {
       resolve({
         error: "It's not your turn"

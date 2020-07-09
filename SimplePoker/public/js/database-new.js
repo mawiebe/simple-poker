@@ -30,7 +30,11 @@ function DbTracker(pathGetter, callback) {
       firebase.database().ref(this.path).off('value');
     }
     this.path = path;
-    firebase.database().ref(this.path).on('value', callback);
+    if (this.path) {
+      firebase.database().ref(this.path).on('value', callback);
+    } else {
+      callback(null);
+    }
     return true;
   }
 }
@@ -40,6 +44,29 @@ function DbTracker(pathGetter, callback) {
 var globalOnChange = function () {}
 
 var globalPlayerInfo = {}
+
+// Tool to avoid multiple refreshes - it schedules refresh for one second later
+// and if multiple refreshes were schedules only does one.
+var needRefresh = false;
+function scheduleRefresh() {
+    if (needRefresh) {
+      return;
+    }
+    needRefresh = true;
+    window.setTimeout(function(){
+      if (needRefresh) {
+        var playersLoaded = globalPlayerInfo.currentGame &&
+            globalPlayerInfo.currentGame.players != null;
+        var myPositionLoaded = globalPlayerInfo.currentGame &&
+            globalPlayerInfo.currentGame.myPosition != null;
+        // Corner case: do not refresh screen for half-loaded game.
+        if (myPositionLoaded == playersLoaded) {
+          needRefresh = false;
+          globalOnChange(globalPlayerInfo);
+        }
+      }
+    }, 1000);
+}
 
 function updateUserInfo(uid, name, email) {
   if (!email && globalPlayerInfo.user) {
@@ -58,7 +85,7 @@ function createGame(callback) {
   });
 }
 
-function joinGame(gid) {
+function joinGame(gid, callback) {
   var joinGame = firebase.functions().httpsCallable('joinGame');
   joinGame({gid: gid}).then(function(result) {
     callback(result.data);
@@ -106,20 +133,32 @@ function exchangeCards(discarded, callback) {
 // 3) current user's private information about current game.
 
 function curentUserInfoPath() {
+  if (!globalPlayerInfo.user.uid) {
+    return null;
+  }
   return userInfoPath(globalPlayerInfo.user.uid);
 }
 
 function currentGameInfoPath() {
+  if (!globalPlayerInfo.currentGameId) {
+    return null;
+  }
   return gameInfoPath(globalPlayerInfo.currentGameId);
 }
 
 function currentPlayersGamePath() {
+  if (!globalPlayerInfo.user.uid || !globalPlayerInfo.currentGameId) {
+    return null;
+  }
   return playersGamePath(globalPlayerInfo.user.uid,
                          globalPlayerInfo.currentGameId);
 }
 
 
 var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
+  if (!snapshot){
+    return;
+  }
   var user = globalPlayerInfo.user;
 
   if (!user || user.uid != snapshot.ref.parent.key) {
@@ -130,27 +169,27 @@ var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
     return;
   }
   if (snapshot.val() == null) {
-    // This will call the function again as it updates the part of DB it is
-    // tied to.
-    updateUserInfo(snapshot.key, user.email,user.defaultName);
+    // This will trigger DB change and refresh.
+    updateUserInfo(snapshot.ref.parent.key, user.defaultName, user.email);
   } else {
     user.email = snapshot.val().email;
     user.name = snapshot.val().name;
     globalPlayerInfo.currentGameId = snapshot.val().currentGame;
     globalPlayerInfo.currentGame = {}
     globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
-    // Avoiding short-circuit evaluation
-    var gameUpdated = gameInfoTracker.updatePath();
-    if (!playersGameTracker.updatePath() && !gameUpdated) {
-      // Invoke callback even if game stayed the same - if this function was
-      // called, somthing indeed changed.
-      globalOnChange(globalPlayerInfo);
-      return;
-    }
+    gameInfoTracker.updatePath();
+    playersGameTracker.updatePath();
+    scheduleRefresh();
   }
 });
 
 var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
+  // Game Id = null;
+  if (!snapshot) {
+    globalPlayerInfo.currentGame = {}
+    globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
+    return;
+  }
   // check state validity
   if (globalPlayerInfo.currentGameId != snapshot.key ||
     !globalPlayerInfo.currentGame) {
@@ -165,6 +204,9 @@ var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
   if (snapshot.val()) {
     if (snapshot.val().players.length < 1) {
       console.error("Game without players");
+      globalPlayerInfo.currentGame = {}
+      globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
+      return;
     }
     globalPlayerInfo.currentGame.status = snapshot.val().status;
     globalPlayerInfo.currentGame.players = snapshot.val().players;
@@ -198,13 +240,18 @@ var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
       }
       prevDoneOrDealer = (player.isDealer || player.drawSize != null);
     }
-
+  } else {
+    globalPlayerInfo.currentGame = {}
+    globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
+    return;
   }
-  globalOnChange(globalPlayerInfo);
-
+  scheduleRefresh();
 });
 var playersGameTracker = new DbTracker(currentPlayersGamePath,
                                        function (snapshot) {
+   if (!snapshot){
+     return;
+   }
   // check state validity
   if (globalPlayerInfo.currentGameId != snapshot.key ||
     !globalPlayerInfo.currentGame) {
@@ -223,7 +270,7 @@ var playersGameTracker = new DbTracker(currentPlayersGamePath,
       globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[i]));
     }
   }
-  globalOnChange(globalPlayerInfo);
+  scheduleRefresh();
 });
 
 function User(uid, email, defaultName) {
@@ -241,13 +288,14 @@ function User(uid, email, defaultName) {
 function onUserChange(uid, email, defaultName) {
   if (!globalPlayerInfo.user || uid != globalPlayerInfo.uid) {
     globalPlayerInfo.user = new User(uid, email, defaultName);
+    globalPlayerInfo.currentGameId = null;
+    // Clear existing game.
+    gameInfoTracker.updatePath();
+    playersGameTracker.updatePath();
   }
 
-  // if updatePath returns true, no need for refresh - it will happen on
-  // result from DB.
-  if (!userInfoTracker.updatePath()) {
-    globalOnChange(globalPlayerInfo);
-  }
+  userInfoTracker.updatePath();
+  scheduleRefresh();
 }
 
 function initWorld(onChange) {
@@ -266,7 +314,7 @@ function initWorld(onChange) {
 
   try {
     let app = firebase.app();
-    globalOnChange(globalPlayerInfo);
+    scheduleRefresh();
   } catch (e) {
     console.error(e);
     globalPlayerInfo.systemOk = false;
