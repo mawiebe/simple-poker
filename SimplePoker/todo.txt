@@ -1,5 +1,3 @@
-- Fix that dealer does not exchange cards
-- Implement next round
 - Do not alert success.
 - Disable irrelevant buttons
 - Implement lock/transaction to avoid concurrency issues. Current possible
@@ -36,3 +34,5 @@ Done:
 - Render showdown
 - Game does not render after re-login or name change
 - Test empty draw
+- Fix that dealer does not exchange cards
+- Implement next round
