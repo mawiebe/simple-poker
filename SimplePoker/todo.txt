@@ -1,5 +1,3 @@
-- Do not alert success.
-- Disable irrelevant buttons
 - Implement lock/transaction to avoid concurrency issues. Current possible
   scenario: a player sends 2 requests to exchange cards simultaneously and
   that messes up cards.
@@ -36,3 +34,5 @@ Done:
 - Test empty draw
 - Fix that dealer does not exchange cards
 - Implement next round
+- Do not alert success.
+- Disable irrelevant buttons

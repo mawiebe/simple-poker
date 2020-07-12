@@ -68,14 +68,14 @@ function scheduleRefresh() {
     }, 1000);
 }
 
-function updateUserInfo(uid, name, email) {
+function updateUserInfo(uid, name, email, callback) {
   if (!email && globalPlayerInfo.user) {
     email = globalPlayerInfo.user.email;
   }
   firebase.database().ref(userInfoPath(uid)).update({
     name: name,
     email: email
-  });
+  }).then(callback());
 }
 
 function createGame(callback) {
@@ -192,11 +192,14 @@ var userInfoTracker = new DbTracker(curentUserInfoPath, function (snapshot) {
   } else {
     user.email = snapshot.val().email;
     user.name = snapshot.val().name;
-    globalPlayerInfo.currentGameId = snapshot.val().currentGame;
-    globalPlayerInfo.currentGame = {}
-    globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
-    gameInfoTracker.updatePath();
-    playersGameTracker.updatePath();
+    if (!globalPlayerInfo.currentGame || !globalPlayerInfo.currentGameId ||
+       globalPlayerInfo.currentGameId != snapshot.val().currentGame) {
+      globalPlayerInfo.currentGameId = snapshot.val().currentGame;
+      globalPlayerInfo.currentGame = {}
+      globalPlayerInfo.currentGame.exchangeCards = exchangeCards;
+      gameInfoTracker.updatePath();
+      playersGameTracker.updatePath();
+    }
     scheduleRefresh();
   }
 });

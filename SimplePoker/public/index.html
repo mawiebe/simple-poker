@@ -16,9 +16,9 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="./js/shared.js?cbust=41"></script>
-  <script defer src="./js/poker.js?cbust=41"></script>
-  <script defer src="./js/database-new.js?cbust=41"></script>
+  <script defer src="./js/shared.js?cbust=44"></script>
+  <script defer src="./js/poker.js?cbust=44"></script>
+  <script defer src="./js/database-new.js?cbust=44"></script>
 
   <script>
 
@@ -125,23 +125,40 @@
     function renderGame(game, gid) {
       if (!game || game.myPosition == null || !game.players) {
         return "No active games";
+        document.getElementById('dealButton').disabled = "disabled";
+        document.getElementById('nextButton').disabled = "disabled";
       }
+      var gameHtml;
+      var deal = false;
+      var next = false;
 
       switch (game.status) {
         case GameState.WaitingForStart:
-          return renderWaiting(game, gid);
+          deal = game.players[game.myPosition].isDealer;
+          gameHtml = renderWaiting(game, gid);
+          break;
         case GameState.WaitingForTurn:
-          return renderGameInFlight(game);
+          gameHtml = renderGameInFlight(game);
+          break;
         case GameState.Showdown:
-            return renderShowdown(game);
-
+          next = true;
+          gameHtml = renderShowdown(game);
+          break;
+        default:
+          gameHtml =  "Malformed game";
+          break;
       }
-      return "Malformed game";
+
+      document.getElementById('dealButton').disabled = deal ? null : "disabled";
+      document.getElementById('nextButton').disabled = next ? null : "disabled";
+      return gameHtml;
     }
 
     function renderPlayerInfo(playerInfo) {
       if (!playerInfo || !playerInfo.user || !playerInfo.user.uid) {
         document.getElementById('game').innerHTML = "Please login";
+        document.getElementById('dealButton').disabled = "disabled";
+        document.getElementById('nextButton').disabled = "disabled";
       } else {
         document.getElementById('name_input').value = playerInfo.user.name;
         document.getElementById('game').innerHTML = renderGame(
@@ -149,26 +166,52 @@
       }
     }
 
+    function hideLoading() {
+      document.getElementById("loading").style.display = "none";
+    }
+
     function resultCallback(result) {
-      alert(JSON.stringify(result));
+      hideLoading();
+      if (result.error) {
+        alert(JSON.stringify(result));
+      } else {
+        console.log("Callback result:" + JSON.stringify(result));
+      }
     }
 
     function updateUserInfoUI() {
       var newName = document.getElementById("name_input").value;
       if (globalPlayerInfo.user.uid && newName && newName != "") {
-        updateUserInfo(globalPlayerInfo.user.uid, newName)
+        document.getElementById("loading").style.display = "inline";
+        updateUserInfo(globalPlayerInfo.user.uid,
+                       newName, /*email=*/ null, hideLoading);
       }
     }
     function joinGameUI() {
+      if (globalPlayerInfo.currentGame &&
+          globalPlayerInfo.currentGame.status != GameState.Showdown) {
+        if (!confirm("Leave current game?")) {
+          return;
+        }
+      }
       var gid = document.getElementById("gid_input").value.trim();
       if (gid && gid != "") {
+        document.getElementById("loading").style.display = "inline";
         joinGame(gid, resultCallback);
       }
     }
     function dealUI() {
+      document.getElementById("loading").style.display = "inline";
       deal(resultCallback);
     }
     function createGameUI() {
+      if (globalPlayerInfo.currentGame &&
+          globalPlayerInfo.currentGame.status != GameState.Showdown) {
+        if (!confirm("Leave current game?")) {
+          return;
+        }
+      }
+      document.getElementById("loading").style.display = "inline";
       createGame(resultCallback);
     }
 
@@ -180,9 +223,11 @@
           cards.push(i);
         }
       }
+      document.getElementById("loading").style.display = "inline";
       exchangeCards(cards, resultCallback);
     }
     function nextRoundUI() {
+      document.getElementById("loading").style.display = "inline";
       nextRound(resultCallback);
     }
   </script>
@@ -197,15 +242,14 @@
       <input type="button" value="Create new game" onclick="createGameUI();" /><br/>
       <input id = "gid_input" type="text" value="-MAxvpQ2xS426TOYzTS9">
       <input type="button" value="Join game" onclick="joinGameUI();" />
-      <input type="button" value="Deal" onclick="dealUI();" />
-      <input type="button" value="Another round" onclick="nextRoundUI();" />
+      <input type="button" id = "dealButton" value="Deal" disabled = "disabled" onclick="dealUI();" />
+      <input type="button" id = "nextButton" value="Another round" disabled = "disabled" onclick="nextRoundUI();" />
     </form>
-    <form id="users"></form>
     <p />
     <div id="game">
       No active games
-      </form>
     </div>
+    <img id="loading" src="img/loading_wikimedia.gif" style="display:none;width:100px;height:100px">
     <p />
     <script>
       document.addEventListener('DOMContentLoaded', function() {
