@@ -111,6 +111,24 @@ function deal(callback) {
   });
 }
 
+function nextRound(callback) {
+  var game = globalPlayerInfo.currentGame;
+  if (!game || !globalPlayerInfo.currentGameId) {
+    callback({error: "No game for a new round"});
+    return;
+  }
+  if (game.status != GameState.Showdown) {
+    callback({error: "Game not finished yet"});
+    return;
+  }
+
+  var createNextRound = firebase.functions().httpsCallable('createNextRound');
+  createNextRound({previousGame: globalPlayerInfo.currentGameId})
+      .then(function(result) {
+            callback(result.data);
+          });
+}
+
 function exchangeCards(discarded, callback) {
   var game = globalPlayerInfo.currentGame;
   if (!game || !globalPlayerInfo.currentGameId ||

@@ -1,11 +1,11 @@
-- Game does not render after re-login or name change
+- Fix that dealer does not exchange cards
 - Implement next round
 - Do not alert success.
 - Disable irrelevant buttons
-- Test empty draw
 - Implement lock/transaction to avoid concurrency issues. Current possible
   scenario: a player sends 2 requests to exchange cards simultaneously and
   that messes up cards.
+- Test shuffle discard
 
 
   function lockedExecute(gid, callback) {
@@ -34,3 +34,5 @@
 Done:
 - Create function to end the game (if player is dealer)
 - Render showdown
+- Game does not render after re-login or name change
+- Test empty draw

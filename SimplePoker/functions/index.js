@@ -88,9 +88,15 @@ function checkCorrectGame(public, private) {
     }
 
     var showdown = (public.status == shared.GameState.Showdown);
-    if (showdown != (!!playerInfo.hand) || showdown != (!!playerInfo.result)) {
+    var handExists = (playerInfo.hand != null);
+    var resultExists = (playerInfo.result != null);
+    if (showdown !=  handExists || showdown != resultExists) {
       return {
-        error: "Hand shown at incorrect moment"
+        error: "Hand shown at incorrect moment",
+        i: i,
+        showdown: showdown,
+        handExists: handExists,
+        resultExists: resultExists
       };
     }
     if (playerInfo.result == shared.PlayerResult.Win) {
@@ -256,22 +262,36 @@ exports.createGame = functions.https.onCall((data, context) => {
   });
 });
 
-function deal(gid, game) {
-  var deck = poker.shuffleDeck();
+// Shuffles a deck and calculates player' cars.
+// Poulates newCards{.deck, .deckPosition} and players[]{.uid, .hand}
+function deal(newCards, oldPlayers, newPlayers) {
+  newCards.deck = poker.shuffleDeck();
+  newCards.deckPosition = oldPlayers.length * poker.handSize;
+
+  for (var i = 0; i < oldPlayers.length; i++) {
+    newPlayers[i] = {
+      uid : oldPlayers[i].uid,
+      // Theoretically we should pick every 5h card but if cards are
+      // shuffled randomly it does not matter.
+      hand: newCards.deck.slice(i * poker.handSize, (i + 1) * poker.handSize)
+    };
+  }
+}
+
+// Shuffles a deck and fills in cards in database. Also change game's status
+// in DB to WaitingForTurn.
+function dealAndSave(gid, game) {
+  var newCards = {};
+  var playersHands = [];
+  deal(newCards, game.private.players, playersHands);
   admin.database().ref(shared.privateGamePath(gid))
-    .child("cards").set({
-      deck: deck,
-      deckPosition: game.private.players.length * poker.handSize
-    });
+    .child("cards").set(newCards);
   // Fill in users' cards.
-  for (var i = 0; i < game.private.players.length; i++) {
-    var uid = game.private.players[i].uid;
-    var hand = deck.slice(i * poker.handSize, (i + 1) * poker.handSize);
-    // Copy both to player's private info and game's private info.
+  for (var i = 0; i < playersHands.length; i++) {
     admin.database().ref(shared.privateGamePath(gid))
-      .child("players").child(i).child("hand").set(hand);
-    admin.database().ref(shared.playersGamePath(uid, gid)).child("hand").set(
-      hand);
+      .child("players").child(i).child("hand").set(playersHands[i].hand);
+    admin.database().ref(shared.playersGamePath(playersHands[i].uid, gid))
+      .child("hand").set(playersHands[i].hand);
   }
 
   admin.database().ref(shared.gameInfoPath(gid)).child("status").set(
@@ -281,72 +301,79 @@ function deal(gid, game) {
 // Create a new round of a game. It takes an ID of a finished game, and creates
 // a new game with same players but who is the dealer shifts to the next player.
 // Gets user ID in auth and ID of the previous game as previousGame argument.
-// exports.createNextRound = functions.https.onCall((data, context) => {
-//   if (!context.auth || !context.auth.uid) {
-//     return {error: "Could not get user ID"};
-//   }
-//   var previousGame = data.previousGame;
-//   if (!previousGame) {
-//     return {error: "Wrong previous game ID"};
-//   }
-//
-//   // Make the rest of the function async to be able to wait for database
-//   // data.
-//   return new Promise(async function(resolve, reject) {
-//     var oldGame = await loadGame(previousGame);
-//     if (oldGame.error) {
-//       resolve(oldGame);
-//       return;
-//     }
-//     if (oldGame.public.status != shared.GameState.Showdown) {
-//       resolve({error: "Can not play next round of unfinished game"});
-//       return;
-//     }
-//
-//     // TODO: check current user was in the game.
-//     var deck = poker.shuffleDeck();
-//     var gameRef = admin.database().ref(shared.gamePrivatePath).push({
-//       NOPE WONT WORK NEED CLEAN HANDS players: oldGame.private.players,
-//       cards: {deck: deck}
-//     });
-//     var gid = gameRef.key;
-//
-//     // Fill in public part of the game
-//     var gamePub = {
-//       status: GameState.WaitingForTurn,
-//       players: []
-//     }
-//     var isDealer =
-//       oldGame.public.players[oldGame.public.players.length-1].isDealer;
-//     for (int i = 0; i < oldGame.public.players.length; i++) {
-//       var oldPlayer = oldGame.public.players[i];
-//       gamePub.players.push({
-//         name: oldPlayer.name,
-//         isDealer: isDealer,   // Dealer is shifted by one
-//         previousResult:oldPlayer.result
-//       });
-//       isDealer = oldPlayer.isDealer;
-//     }
-//     admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
-//
-//     // Fill in private part of the game
-//     for (var i in oldGame.private.players) {
-//       var uid = oldGame.private.players[i].uid;
-//       admin.database().ref(shared.playersGamePath(uid, gid)).set({
-//         myPosition: i,
-//         // Theoretically we should pick every 5h card but if cards are
-//         // shuffled randomly it does not matter.
-//         hand: deck.slice(i*poker.handSize, (i+1)*poker.handSize);
-//       });
-//       admin.database().ref(shared.userInfoPath(uid)).update({
-//         currentGame: gid
-//       });
-//     }
-//     // Return ID of the new game
-//     resolve({gid: gid});
-//     return;
-//   });
-// });
+exports.createNextRound = functions.https.onCall((data, context) => {
+  if (!context.auth || !context.auth.uid) {
+    return {error: "Could not get user ID"};
+  }
+  var previousGame = data.previousGame;
+  if (!previousGame) {
+    return {error: "Wrong previous game ID"};
+  }
+
+  // Make the rest of the function async to be able to wait for database
+  // data.
+  return new Promise(async function(resolve, reject) {
+    var oldGame = await loadGame(previousGame);
+    if (oldGame.error) {
+      resolve(oldGame);
+      return;
+    }
+    if (oldGame.public.status != shared.GameState.Showdown) {
+      resolve({error: "Can not play next round of unfinished game"});
+      return;
+    }
+
+    var players = [];
+    var newCards = {};
+    // Populates newCards{.deck, .deckPosition} and players[]{.uid, .hand}
+    // with freshly dealt cards.
+    deal(newCards, oldGame.private.players, players);
+
+    // Create game and fill in private[hidden from players] part of the game.
+    var gameRef = admin.database().ref(shared.gamePrivatePath).push({
+      cards: newCards,
+      players: players
+    });
+    var gid = gameRef.key;
+
+    // Fill in public part of the game
+    var gamePub = {
+      status: shared.GameState.WaitingForTurn,
+      players: []
+    }
+    var isDealer =
+        oldGame.public.players[oldGame.public.players.length-1].isDealer;
+    for (var i = 0; i < oldGame.public.players.length; i++) {
+      var oldPlayer = oldGame.public.players[i];
+      var player = {
+        name: oldPlayer.name,  // TODO: pick fresh name from DB.
+        previousResult:oldPlayer.result
+      };
+      if (isDealer) {
+        player.isDealer = true;
+      }
+      gamePub.players.push(player);
+      // Dealer is shifted by one
+      isDealer = oldPlayer.isDealer;
+    }
+    admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
+
+    // Fill in user's private information about the game
+    for (var i in players) {
+      var uid = players[i].uid;
+      admin.database().ref(shared.playersGamePath(uid, gid)).set({
+        myPosition: i,
+        hand: players[i].hand
+      });
+      admin.database().ref(shared.userInfoPath(uid)).update({
+        currentGame: gid
+      });
+    }
+    // Return ID of the new game
+    resolve({gid: gid});
+    return;
+  });
+});
 
 
 // Function for a user to join a game.
@@ -486,7 +513,7 @@ exports.startGame = functions.https.onCall((data, context) => {
       });
       return;
     }
-    deal(gid, game);
+    dealAndSave(gid, game);
     resolve({});
     return;
   });

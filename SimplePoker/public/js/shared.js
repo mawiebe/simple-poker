@@ -22,7 +22,6 @@
 //    - Waiting for people to join
 //    - waiting for a turn
 //    - showdown
-//    - waiting for people to decide about the next game.
 // /game-pub/$gid/players/$player_nr - information about the player.
 //                                     Keyed by number 0-player-count
 //   = {name, draw, drawSize, isDealer,
