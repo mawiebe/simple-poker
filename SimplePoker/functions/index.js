@@ -526,7 +526,7 @@ exports.startGame = functions.https.onCall((data, context) => {
 // cards - Map {<card_to_exchange_index>-> 1}
 // drawSize - number of cards to exchange
 // game - {private, public} -snapshots of database from loadGame()
-function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
+function exchangeCardsImpl(uid, gid, index, draw, drawSize, game) {
   // No cards to exchange, just record the turn.
   if (drawSize == 0) {
     admin.database().ref(shared.gameInfoPath(gid)).child("players")
@@ -535,15 +535,15 @@ function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
   }
 
   // make local copy of game variables we will/might change.
-  var newCards = game.private.players[index].hand.slice();
+  var cards = game.private.players[index].hand
   var deckPosition = game.private.cards.deckPosition;
   var discardShuffle = game.private.cards.discardShuffle;
   var discard =
       game.private.cards.discard ?
           game.private.cards.discard.slice() : [];
   // Note, cards is a map where keys are indices of cards to discard.
-  for (var i in cards) {
-    var oldCard = newCards[i];
+  for (var i in draw) {
+    var oldCard = cards[i];
     if (deckPosition >= game.private.cards.deck.length) {
       // We ran out of cards, going through shuffled discard.
       if (!discardShuffle) {
@@ -555,10 +555,10 @@ function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
       if (dspos >= discardShuffle.length) {
         return { error: "We somehow ran out of cards"};
       }
-      newCards[i] = discardShuffle[dpos];
+      cards[i] = discardShuffle[dpos];
     } else {
       // getting cards from deck
-      newCards[i] = game.private.cards.deck[deckPosition];
+      cards[i] = game.private.cards.deck[deckPosition];
     }
     discard.push(oldCard);
     deckPosition++;
@@ -579,16 +579,16 @@ function exchangeCardsImpl(uid, gid, index, cards, drawSize, game) {
   }
   // Update player's cards in private game dataset.
   admin.database().ref(shared.privateGamePath(gid))
-    .child("players").child(index).child("hand").set(newCards);
+    .child("players").child(index).child("hand").set(cards);
   // Update player's cards in private player's dataset.
   admin.database().ref(shared.playersGamePath(uid, gid)).child("hand").set(
-    newCards);
+    cards);
   // Update public game information with player's draw. Has to be the last to
   // avoid other players making move too early
   admin.database().ref(shared.gameInfoPath(gid)).child("players")
     .child(index).update({
       drawSize: drawSize,
-      draw: Object.keys(cards)
+      draw: Object.keys(draw)
     });
 
   return {}
