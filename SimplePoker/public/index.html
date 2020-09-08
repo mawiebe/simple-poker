@@ -16,99 +16,140 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="./js/shared.js?cbust=44"></script>
-  <script defer src="./js/poker.js?cbust=44"></script>
-  <script defer src="./js/database-new.js?cbust=44"></script>
+  <script defer src="./js/shared.js?cbust=48"></script>
+  <script defer src="./js/poker.js?cbust=48"></script>
+  <script defer src="./js/database-new.js?cbust=48"></script>
+
+  <link rel="stylesheet" href="css/index.css?cbust=48">
 
   <script>
 
-    function outputHand(hand, combo) {
+    var selectedCards = [false, false, false, false, false];
+
+    function cardClicked(card, i) {
+      selectedCards[i] = !selectedCards[i];
+      card.classList.toggle('cardSelected');
+    }
+    function outputHand(hand, width, noSelect) {
       var str = "";
       for (var i in hand) {
-        str += hand[i].text + " ";
-      }
-      if (combo) {
-        str += combo.combinationName;
+        var className =
+            (selectedCards[i] && !noSelect ? " class='cardSelected' " : "");
+        str += "<img src='" + hand[i].image +"' width='" + width + "' " +
+            "onclick='cardClicked(this, " + i + ")'" + className + "> ";
       }
       return str;
     }
 
-    function lastTime(result) {
-      if (result == PlayerResult.Win) {
-        return " Won previous round";
-      } else if (result == PlayerResult.Lose) {
-        return " Lost previous round";
+    function isExchaned(i, draw) {
+      if (!draw) {
+        return false;
       }
-      return "";
+      for (j in draw) {
+        if (draw[j] == i) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function playerName(player, showdown) {
+      var result = (showdown ? player.result : player.previousResult);
+      var className = "name";
+      if (result == PlayerResult.Win) {
+        className = "winner"
+      } else if (result == PlayerResult.Lose) {
+        className = "loser"
+      }
+
+      var text = "<span class='" + className + "'>"+ player.name +"</span> ";
+      if (player.isDealer) {
+        text += "<img src='img/dealer-chip.png' width='20px'>"
+      }
+      return text;
     }
 
     function playerText(player) {
-      var playerLabel = player.isDealer ? "Dealer " : "Player ";
-      var text;
+      var text="<tr><td>" + playerName(player, false) + "<br/>";
       if (player.theirTurn) {
-        text = playerLabel + player.name + " is doing their turn";
-      } else if (player.drawSize == null) {
-        text = playerLabel + player.name + " is waiting for their turn";
-      } else {
-        text = playerLabel + player.name + " exchanged " + player.drawSize +
-            " cards";
+        text += "Doing their turn.";
       }
-      return text +"." + lastTime(player.previousResult);
+      text +="</td><td>";
+      for (var i = 0; i < 5; i++) {
+        var img = "img/cards/" +
+            (isExchaned(i, player.draw) ? "red_back.png" : "gray_back.png");
+        text += "<img src='"+img+"' width='40px'> ";
+      }
+      return text + "</td></tr>";
     }
 
     function renderGameInFlight(game) {
-      var contents = "";
-      // var yourTurn = false;
-      // var yourHand = getHand(game, userId);
-      for (i in game.players) {
-        var player = game.players[i];
-        if (i == game.myPosition) {
-          if (player.isDealer) {
-              contents += "[Dealer]";
-          }
-          contents += "<b>Your hand:</b> " + outputHand(game.myHand);
-          if (player.theirTurn) {
-            contents += "<span style='color:green'> Your turn</span>";
-          }
-          contents += lastTime(player.previousResult);
-        } else {
-          contents += playerText(player);
-        }
-        contents += "<br/>";
+      var contents = "<table style='border:none;cellpadding:0;cellspacing:0'>";
+      for (var offset = 1; offset < game.players.length; offset++) {
+        var i = (game.myPosition + offset) % game.players.length;
+        var player =  game.players[i];
+        contents += playerText(player);
       }
-      if (game.players[game.myPosition].theirTurn) {
-        contents += "<p/>Select cards to exchange:<br/>"
-        contents += "<form>";
-        for (var i in game.myHand) {
-          contents += "<input type='checkbox' id='xch" + i + "' name='xch" + i + "'/>";
-          contents += "<label for='xch" + i + "'>" + game.myHand[i].text;
-          contents += "</label>";
-        }
-        contents +=
-          "<input type='button' value='exchange' onclick='exchangeCardsUI();'/>" +
-          "</form>";
-      }
+      contents +="<tr><td colspan=2>";
+      var player =  game.players[game.myPosition];
+
+      contents += "<center>";
+      var exchangeEnabled = (player.theirTurn ? "" : " disabled='disabled' ");
+      contents += "<form><input type='button' value='exchange' " +
+           exchangeEnabled + "onclick='exchangeCardsUI();'/>" +
+        "</form><br/>";
+
+      contents += outputHand(game.myHand, "60px") + "<br/>";
+
+
+      contents += playerName(player, false) + "<br/>";
+      contents += "</center>";
+      contents += "</td></tr></table>";
       return contents
     }
 
-    function renderShowdown(game) {
-      var str = "";
-      for (i in game.players) {
-        var playerInfo = game.players[i];
-        if (i == game.myPosition) {
-          str += "<b>Your hand:</b> "
-        } else {
-          str += "Player " + playerInfo.name + ":"
-        }
-        str += outputHand(playerInfo.hand, playerInfo.combination);
-        if (playerInfo.result == PlayerResult.Win) {
-          str += " wins";
-        } else if (playerInfo.result == PlayerResult.Lose) {
-          str += " loses";
-        }
-        str += "<br/>"
+    function playerShowdown(player) {
+      var text="<tr><td>" + playerName(player, true);
+      text += "<br/>" + player.combination.combinationName;
+      if (player.result == PlayerResult.Win) {
+        text += " wins";
+      } else if (player.result == PlayerResult.Lose) {
+        text += " loses";
       }
-      return str;
+
+      text +="</td><td>";
+      text += outputHand(player.hand,"40px", true)
+      return text + "</td></tr>";
+    }
+
+    function renderShowdown(game) {
+      var contents = "<table style='border:none;cellpadding:0;cellspacing:0'>";
+      for (var offset = 1; offset < game.players.length; offset++) {
+        var i = (game.myPosition + offset) % game.players.length;
+        var player =  game.players[i];
+        contents += playerShowdown(player);
+      }
+      contents +="<tr><td colspan=2>";
+      var player =  game.players[game.myPosition];
+
+      contents += "<center>";
+      var exchangeEnabled =  " disabled='disabled' ";
+      contents += "<form><input type='button' value='exchange' " +
+           exchangeEnabled + "onclick='exchangeCardUI();'/>" +
+        "</form><br/>";
+
+      contents += outputHand(game.myHand, "60px", true) + "<br/>";
+      contents += player.combination.combinationName;
+      if (player.result == PlayerResult.Win) {
+        contents += " wins";
+      } else if (player.result == PlayerResult.Lose) {
+        contents += " loses";
+      }
+
+      contents += "<br/>" + playerName(player, true);
+      contents += "</center>";
+      contents += "</td></tr></table>";
+      return contents;
     }
 
     function renderWaiting(game, gid) {
@@ -218,8 +259,7 @@
     function exchangeCardsUI() {
       var cards = [];
       for (var i = 0; i < 5; i++) {
-        var checkbox = document.getElementById('xch' + i);
-        if (checkbox.checked) {
+        if (selectedCards[i]) {
           cards.push(i);
         }
       }
@@ -233,7 +273,7 @@
   </script>
 </head>
 
-<body>
+<body style="background: #059335;">
   <div id="buttons">
     <form>
       <input type="button" value="login" onclick="login();" />

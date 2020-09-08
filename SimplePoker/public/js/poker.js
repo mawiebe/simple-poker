@@ -30,6 +30,11 @@ var rankNames = [
 var suits = [
   "♠", "♥", "♦", "♣", "⛀", "⛂"
 ];
+
+var suitLetters = [
+  "S", "H", "D", "C", "I", "U"
+];
+
 var suitColors = [
   "black", "red", "red", "black", "red", "black"
 ];
@@ -57,7 +62,8 @@ function getCard(code) {
     rankName: rankNames[rank],
     suitName: suitNames[suit],
     text: '<span style="color:' + suitColors[suit] + '">' + ranks[rank] + suits[
-      suit] + '</span>'
+      suit] + '</span>',
+    image: 'img/cards/' + ranks[rank] + suitLetters[suit] +".png"
   }
 }
 

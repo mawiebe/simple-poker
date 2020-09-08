@@ -1,0 +1,21 @@
+.cardSelected {
+  border: 1px;
+  border-style: solid;
+  border-color: yellow;
+  border-radius: 3px;
+}
+
+.winner {
+  color: #FFAF13;
+  font-weight: bold;
+}
+
+.loser {
+  color: #CC1D1D;
+  font-weight: bold;
+}
+
+.name {
+  color: white;
+  font-weight: bold;
+}
