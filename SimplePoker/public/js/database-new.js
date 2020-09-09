@@ -254,8 +254,8 @@ var gameInfoTracker = new DbTracker(currentGameInfoPath, function (snapshot) {
       // translate hand from numeric codes to card descriptions.
       if (player.hand) {
         var handCards = [];
-        for (var i in player.hand) {
-          handCards.push(getCard(player.hand[i]));
+        for (var j in player.hand) {
+          handCards.push(getCard(player.hand[j]));
         }
         player.hand = handCards;
       }
@@ -285,7 +285,7 @@ var playersGameTracker = new DbTracker(currentPlayersGamePath,
   }
   // Load players private info about the game to the global object
   if (snapshot.val()) {
-    globalPlayerInfo.currentGame.myPosition = snapshot.val().myPosition;
+    globalPlayerInfo.currentGame.myPosition = Number(snapshot.val().myPosition);
     globalPlayerInfo.currentGame.myHand = []
     for (var i in snapshot.val().hand) {
       globalPlayerInfo.currentGame.myHand.push(getCard(snapshot.val().hand[i]));
