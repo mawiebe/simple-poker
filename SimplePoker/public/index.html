@@ -24,6 +24,7 @@
 
   <script>
 
+    var currentGameId = null;
     var selectedCards = [false, false, false, false, false];
 
     function cardClicked(card, i) {
@@ -234,6 +235,13 @@
         joinIfNeeded(gid);
         return "No active games";
       }
+
+      // Clear exchange card selection if we started a new game.
+      if (gid != currentGameId) {
+        selectedCards = [false, false, false, false, false];
+        currentGameId = gid;
+      }
+
       var gameHtml;
       var deal = false;
       var next = false;

@@ -359,7 +359,7 @@ exports.createNextRound = functions.https.onCall((data, context) => {
     admin.database().ref(shared.gameInfoPath(gid)).set(gamePub);
 
     // Fill in user's private information about the game
-    for (var i in players) {
+    for (var i = 0; i < players.length; i++) {
       var uid = players[i].uid;
       admin.database().ref(shared.playersGamePath(uid, gid)).set({
         myPosition: i,
