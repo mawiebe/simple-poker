@@ -16,11 +16,11 @@
   <script defer src="/__/firebase/7.14.2/firebase-functions.js"></script>
   <!-- initialize the SDK after all desired features are loaded -->
   <script defer src="/__/firebase/init.js"></script>
-  <script defer src="./js/shared.js?cbust=48"></script>
-  <script defer src="./js/poker.js?cbust=48"></script>
-  <script defer src="./js/database-new.js?cbust=48"></script>
+  <script defer src="./js/shared.js?cbust=50"></script>
+  <script defer src="./js/poker.js?cbust=50"></script>
+  <script defer src="./js/database-new.js?cbust=50"></script>
 
-  <link rel="stylesheet" href="css/index.css?cbust=48">
+  <link rel="stylesheet" href="css/index.css?cbust=50">
 
   <script>
 
@@ -152,8 +152,23 @@
       return contents;
     }
 
+    function copyUrl(urlToCopy) {
+      var tempInput = document.createElement("input");
+      tempInput.value = urlToCopy;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      tempInput.setSelectionRange(0, 99999); /*For mobile devices*/
+      document.execCommand("copy");
+      document.body.removeChild(tempInput);
+    }
+
     function renderWaiting(game, gid) {
-      var str = "Waiting for more players to join. Game ID: " + gid;
+      var joinUrl = "http://simplegames-9794f.web.app/#join=" + gid;
+      var callCopy = "copyUrl('"+joinUrl+"');";
+      var str = "Waiting for more players to join. " +
+          "<a href='" + joinUrl +"'>"+
+          "Join game URL</a>";
+      str += '<button onclick="' + callCopy + '">Copy</button>';
       str += "<br/>Players so far:<ol>";
       for(var i in game.players) {
         str += "<li>"+game.players[i].name+"</li>";
@@ -162,12 +177,62 @@
       return str;
     }
 
+    function joinIfNeeded(currentGid) {
+      if (!location.hash || !location.hash.startsWith("#join=")) {
+        return;
+      }
+      var gid = location.hash.substring(6);
+      if (gid == currentGid || gid == "") {
+        return;
+      }
+      location.hash = "";
+      if (!(/^[-a-zA-Z0-9_]*$/.test(gid))) {
+        alert("Malformed gid:" +gid);
+        return;
+      }
+      showLoading();
+      getPublicGame(gid, function (game) {
+        hideLoading();
+        if (!game) {
+          alert("Could not find game with id="+gid);
+          return;
+        }
+        if (game.status != GameState.WaitingForStart) {
+          alert("Game "+gid+ " already started");
+          return;
+        }
+        var message = "";
+        if (globalPlayerInfo.currentGame &&
+            globalPlayerInfo.currentGame.status != GameState.Showdown) {
+          message = "Leave current game and join the game with ";
+        } else {
+          message = "Join the game with ";
+        }
+        if (game.players.length == 0) {
+          message += "no other players"
+        }
+        for (var i = 0; i < game.players.length; i++) {
+          if (i > 0 && i == game.players.length -1) {
+            message += " and ";
+          } else if (i > 0) {
+            message += ", ";
+          }
+          message += game.players[i].name;
+        }
+        message += "?"
+        if (confirm(message)) {
+          showLoading();
+          joinGame(gid, resultCallback);
+        }
+      });
+    }
 
     function renderGame(game, gid) {
       if (!game || game.myPosition == null || !game.players) {
-        return "No active games";
         document.getElementById('dealButton').disabled = "disabled";
         document.getElementById('nextButton').disabled = "disabled";
+        joinIfNeeded(gid);
+        return "No active games";
       }
       var gameHtml;
       var deal = false;
@@ -192,6 +257,7 @@
 
       document.getElementById('dealButton').disabled = deal ? null : "disabled";
       document.getElementById('nextButton').disabled = next ? null : "disabled";
+      joinIfNeeded(gid);
       return gameHtml;
     }
 
@@ -205,6 +271,10 @@
         document.getElementById('game').innerHTML = renderGame(
           playerInfo.currentGame, playerInfo.currentGameId);
       }
+    }
+
+    function showLoading() {
+      document.getElementById("loading").style.display = "inline";
     }
 
     function hideLoading() {
@@ -223,26 +293,13 @@
     function updateUserInfoUI() {
       var newName = document.getElementById("name_input").value;
       if (globalPlayerInfo.user.uid && newName && newName != "") {
-        document.getElementById("loading").style.display = "inline";
+        showLoading();
         updateUserInfo(globalPlayerInfo.user.uid,
                        newName, /*email=*/ null, hideLoading);
       }
     }
-    function joinGameUI() {
-      if (globalPlayerInfo.currentGame &&
-          globalPlayerInfo.currentGame.status != GameState.Showdown) {
-        if (!confirm("Leave current game?")) {
-          return;
-        }
-      }
-      var gid = document.getElementById("gid_input").value.trim();
-      if (gid && gid != "") {
-        document.getElementById("loading").style.display = "inline";
-        joinGame(gid, resultCallback);
-      }
-    }
     function dealUI() {
-      document.getElementById("loading").style.display = "inline";
+      showLoading();
       deal(resultCallback);
     }
     function createGameUI() {
@@ -252,7 +309,7 @@
           return;
         }
       }
-      document.getElementById("loading").style.display = "inline";
+      showLoading();
       createGame(resultCallback);
     }
 
@@ -263,11 +320,11 @@
           cards.push(i);
         }
       }
-      document.getElementById("loading").style.display = "inline";
+      showLoading();
       exchangeCards(cards, resultCallback);
     }
     function nextRoundUI() {
-      document.getElementById("loading").style.display = "inline";
+      showLoading();
       nextRound(resultCallback);
     }
   </script>
@@ -280,8 +337,6 @@
       Your name: <input id = "name_input" type="text" >
       <input type="button" value="Update name" onclick="updateUserInfoUI();" />
       <input type="button" value="Create new game" onclick="createGameUI();" /><br/>
-      <input id = "gid_input" type="text" value="-MAxvpQ2xS426TOYzTS9">
-      <input type="button" value="Join game" onclick="joinGameUI();" />
       <input type="button" id = "dealButton" value="Deal" disabled = "disabled" onclick="dealUI();" />
       <input type="button" id = "nextButton" value="Another round" disabled = "disabled" onclick="nextRoundUI();" />
     </form>

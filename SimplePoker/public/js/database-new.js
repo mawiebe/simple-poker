@@ -16,6 +16,12 @@ function login() {
   });
 }
 
+function getPublicGame(gid, callback) {
+  firebase.database().ref(gameInfoPath(gid)).once('value', function(snapshot) {
+    callback(snapshot ? snapshot.val() : null);
+  });
+}
+
 // Tool that helps to track a part of a database and switch to another part
 // when needed.
 function DbTracker(pathGetter, callback) {
